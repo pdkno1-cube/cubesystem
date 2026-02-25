@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)", "Bash(git status)", "Bash(git diff *)",
+      "Bash(git log *)", "Bash(git add *)", "Bash(git commit *)",
+      "Bash(git checkout *)", "Bash(git branch *)", "Bash(git stash *)",
+      "Bash(cat *)", "Bash(ls *)", "Bash(mkdir -p *)",
+      "Bash(cp *)", "Bash(mv *)", "Bash(grep *)", "Bash(find *)", "Bash(echo *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)", "Bash(sudo *)",
+      "Read(.env)", "Read(.env.*)", "Write(.env)", "Write(.env.*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "echo '🚀 시스템 v4.0 | GUIDE.md → AGENTS.md → PRIME.md 읽기 권장' && git status 2>/dev/null | head -3",
+        "timeout": 5
+      }]
+    }]
+  }
+}

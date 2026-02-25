@@ -1,0 +1,3 @@
+AGENTS.md, TEAM_H_SECURITY/AGENT.md 읽어.
+TEAM_H로서 보안 점검: $ARGUMENTS
+OWASP Top 10 기준, 취약점 → TEAM_H_SECURITY/reports/VULN-NNN-TEAM_X.md 생성
