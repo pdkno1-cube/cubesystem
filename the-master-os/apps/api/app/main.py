@@ -24,6 +24,7 @@ from app.middleware.audit_logger import AuditLogMiddleware
 from app.middleware.rate_limiter import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.routers import agents, health, pipelines
+from app.ws import ConnectionManager, ws_router
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
 
     # --- State ---
     app.state.limiter = limiter
+    app.state.ws_manager = ConnectionManager()
 
     # --- Middleware (executed bottom-to-top) ---
 
@@ -108,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(pipelines.router)
     app.include_router(agents.router)
+    app.include_router(ws_router)
 
     return app
 
