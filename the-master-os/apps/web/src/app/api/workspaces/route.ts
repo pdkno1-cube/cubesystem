@@ -17,7 +17,7 @@ const createWorkspaceSchema = z.object({
     .optional(),
   description: z.string().max(500).optional(),
   category: z
-    .enum(['logistics', 'it', 'fnb', 'ecommerce', 'marketing', 'finance', 'other'])
+    .enum(['corporation', 'logistics', 'it', 'fnb', 'ecommerce', 'marketing', 'finance', 'other'])
     .optional(),
   icon: z
     .enum([

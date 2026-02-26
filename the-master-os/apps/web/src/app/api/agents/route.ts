@@ -206,6 +206,7 @@ export async function POST(request: NextRequest) {
 
     const insertPayload: Database['public']['Tables']['agents']['Insert'] = {
       name: agentData.name,
+      display_name: agentData.name,
       slug: `${slug}-${Date.now()}`,
       description: agentData.description ?? null,
       icon: agentData.icon ?? null,

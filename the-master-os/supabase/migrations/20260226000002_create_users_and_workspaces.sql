@@ -103,7 +103,10 @@ CREATE TRIGGER trg_workspace_members_updated_at
 -- (Security review RLS-07 recommendation)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_add_workspace_owner()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
     INSERT INTO workspace_members (workspace_id, user_id, role, joined_at)
     VALUES (NEW.id, NEW.owner_id, 'owner', now());

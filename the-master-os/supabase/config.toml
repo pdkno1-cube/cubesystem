@@ -46,9 +46,9 @@ max_enrolled_factors = 10
 enroll_enabled = true
 verify_enabled = true
 
-# Disable email confirmation (initial phase)
+# Email provider: enabled for login, signup controlled by [auth].enable_signup
 [auth.email]
-enable_signup = false
+enable_signup = true
 enable_confirmations = false
 double_confirm_changes = false
 
