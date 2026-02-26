@@ -7,7 +7,7 @@
 
 ## 📐 전체 시스템 구조
 
-```
+```text
 GUIDE.md    ← ★★★ 모든 대화의 1순위 (CEO 가이드 & 총괄)
 AGENTS.md   ← ★★  시스템 헌법 (이 파일)
 PRIME.md    ← ★   CTO 오케스트레이터 철학 & 프로토콜
@@ -33,7 +33,7 @@ PRIME.md    ← ★   CTO 오케스트레이터 철학 & 프로토콜
 ## 🤖 전체 팀 구성 (8개 팀 / 19개 에이전트)
 
 | 우선순위 | 팀 코드 | 팀명 | 내장 에이전트 | 터미널 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **0** | `GUIDE` | **CEO 가이드 & 총괄** | 전체 시스템 인지, CEO 코칭 | **모든 대화** |
 | 1 | `TEAM_G_DESIGN` | 시스템 설계 & PRD | 🏛️ ARCHITECT · 📋 PRD_MASTER | T-7 |
 | 2 | `TEAM_H_SECURITY` | **보안 전문가** | 🛡️ SEC_ARCHITECT · 🔍 PENTESTER · 🔒 COMPLIANCE | T-8 |
@@ -48,7 +48,7 @@ PRIME.md    ← ★   CTO 오케스트레이터 철학 & 프로토콜
 
 ## 🔗 전체 오케스트레이션 흐름 (v4.0)
 
-```
+```text
 CEO 아이디어 / 요청
       │
       ▼
@@ -78,7 +78,8 @@ CEO 아이디어 / 요청
 ## 📋 공통 규칙 (모든 에이전트 필수 준수)
 
 ### 1. 파일 읽기 순서
-```
+
+```text
 1순위: GUIDE.md              ← ★ 모든 대화 최우선
 2순위: AGENTS.md             ← 전체 구조 (이 파일)
 3순위: PRIME.md              ← CTO 철학 & 프로토콜
@@ -88,7 +89,8 @@ CEO 아이디어 / 요청
 ```
 
 ### 2. 프로젝트 진행 필수 순서
-```
+
+```text
 TEAM_G 설계 → TEAM_H 보안검토 → TEAM_A 기획
 → TEAM_B+C 개발 → TEAM_H 보안게이트 → TEAM_D 배포
 
@@ -99,7 +101,7 @@ TEAM_G 설계 → TEAM_H 보안검토 → TEAM_A 기획
 ### 3. 팀 간 소통 프로토콜
 
 | 방향 | 파일 경로 |
-|---|---|
+| --- | --- |
 | TEAM_G → TEAM_A (설계 인계) | `TEAM_G_DESIGN/prd/PRD-*.md` + `architecture/ARCH-*.md` |
 | TEAM_H → 각팀 (취약점) | `TEAM_H_SECURITY/reports/VULN-NNN-TEAM_X.md` |
 | TEAM_A → 각팀 (티켓) | `TEAM_A_PM/tickets/TICKET-NNN-TEAM_X.md` |
@@ -109,7 +111,7 @@ TEAM_G 설계 → TEAM_H 보안검토 → TEAM_A 기획
 ### 4. 명령어 (모든 터미널 공통)
 
 | 명령어 | 동작 |
-|---|---|
+| --- | --- |
 | `/guide [요청]` | GUIDE: 요청 분석 + 팀 배정 + 지시문 생성 |
 | `/design [아이디어]` | TEAM_G: PRD + 아키텍처 설계 |
 | `/security [대상]` | TEAM_H: 보안 검토 요청 |
@@ -147,7 +149,7 @@ claude --system-prompt "$(cat GUIDE.md) $(cat PRIME.md) $(cat TEAM_H_SECURITY/AG
 
 ## 📁 전체 디렉토리 구조 (v4.0)
 
-```
+```text
 project-root/
 ├── GUIDE.md                          ← ★★★ 모든 대화 최우선 로드
 ├── AGENTS.md                         ← ★★  시스템 헌법
@@ -195,4 +197,4 @@ project-root/
 
 ---
 
-*버전: v4.0 | 최종 수정: 2026.02.24 | 팀: 8개 | 에이전트: 19개*
+버전: v4.0 | 최종 수정: 2026.02.24 | 팀: 8개 | 에이전트: 19개
