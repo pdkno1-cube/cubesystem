@@ -153,6 +153,7 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          display_name: string;
           slug: string;
           description: string | null;
           icon: string | null;
@@ -182,6 +183,7 @@ export interface Database {
         Insert: {
           id?: string;
           name: string;
+          display_name: string;
           slug: string;
           description?: string | null;
           icon?: string | null;
@@ -211,6 +213,7 @@ export interface Database {
         Update: {
           id?: string;
           name?: string;
+          display_name?: string;
           slug?: string;
           description?: string | null;
           icon?: string | null;
