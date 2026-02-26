@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
-const PUBLIC_ROUTES = new Set(['/login']);
+const PUBLIC_ROUTES = new Set(['/login', '/auth/callback']);
 
 // DEV_BYPASS: Supabase 미연결 시 인증 우회 (개발 전용)
 // SECURITY: Only allow bypass when NOT in production to prevent accidental auth disable
