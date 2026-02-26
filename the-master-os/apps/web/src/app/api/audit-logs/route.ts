@@ -1,0 +1,155 @@
+import { type NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+interface AuditLogEntry {
+  id: string;
+  workspace_id: string | null;
+  workspace_name: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  agent_id: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  details: Record<string, unknown>;
+  ip_address: string | null;
+  severity: "info" | "warning" | "error" | "critical";
+  created_at: string;
+}
+
+interface AuditLogsResponse {
+  data: AuditLogEntry[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+interface AuditLogsErrorResponse {
+  error: { code: string; message: string };
+}
+
+function errorResponse(code: string, message: string, status: number) {
+  return NextResponse.json({ error: { code, message } }, { status });
+}
+
+export async function GET(
+  request: NextRequest,
+): Promise<NextResponse<AuditLogsResponse | AuditLogsErrorResponse>> {
+  try {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return errorResponse("UNAUTHORIZED", "인증이 필요합니다.", 401);
+    }
+
+    const { searchParams } = request.nextUrl;
+    const page = parseInt(searchParams.get("page") ?? "1", 10);
+    const limit = parseInt(searchParams.get("limit") ?? "20", 10);
+    const action = searchParams.get("action");
+    const workspaceId = searchParams.get("workspace_id");
+    const severity = searchParams.get("severity");
+
+    const offset = (page - 1) * limit;
+
+    // Build query
+    let query = supabase
+      .from("audit_logs")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    if (action) {
+      query = query.ilike("action", `%${action}%`);
+    }
+    if (workspaceId) {
+      query = query.eq("workspace_id", workspaceId);
+    }
+    if (severity) {
+      query = query.eq("severity", severity);
+    }
+
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: logs, error: logsError, count } = await query;
+
+    if (logsError) {
+      return errorResponse(
+        "DB_ERROR",
+        `감사 로그 조회 실패: ${logsError.message}`,
+        500,
+      );
+    }
+
+    // Collect unique workspace_ids and user_ids for name resolution
+    const workspaceIds = [
+      ...new Set(
+        (logs ?? [])
+          .map((log) => log.workspace_id as string | null)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const userIds = [
+      ...new Set(
+        (logs ?? [])
+          .map((log) => log.user_id as string | null)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+
+    // Fetch workspace names
+    const workspaceNameMap = new Map<string, string>();
+    if (workspaceIds.length > 0) {
+      const { data: workspaces } = await supabase
+        .from("workspaces")
+        .select("id, name")
+        .in("id", workspaceIds);
+      for (const ws of workspaces ?? []) {
+        workspaceNameMap.set(ws.id as string, ws.name as string);
+      }
+    }
+
+    // Fetch user display names from users table
+    const userNameMap = new Map<string, string>();
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, display_name")
+        .in("id", userIds);
+      for (const userRecord of users ?? []) {
+        userNameMap.set(
+          userRecord.id as string,
+          userRecord.display_name as string,
+        );
+      }
+    }
+
+    const data: AuditLogEntry[] = (logs ?? []).map((log) => ({
+      id: log.id as string,
+      workspace_id: (log.workspace_id as string) ?? null,
+      workspace_name:
+        workspaceNameMap.get(log.workspace_id as string) ?? null,
+      user_id: (log.user_id as string) ?? null,
+      user_name: userNameMap.get(log.user_id as string) ?? null,
+      agent_id: (log.agent_id as string) ?? null,
+      action: log.action as string,
+      resource_type: log.resource_type as string,
+      resource_id: (log.resource_id as string) ?? null,
+      details: (log.details as Record<string, unknown>) ?? {},
+      ip_address: (log.ip_address as string) ?? null,
+      severity: log.severity as AuditLogEntry["severity"],
+      created_at: log.created_at as string,
+    }));
+
+    return NextResponse.json({
+      data,
+      total: count ?? 0,
+      page,
+      limit,
+    });
+  } catch {
+    return errorResponse("INTERNAL_ERROR", "서버 내부 오류가 발생했습니다.", 500);
+  }
+}

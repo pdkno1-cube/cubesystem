@@ -1,0 +1,79 @@
+# =============================================================================
+# The Master OS — Supabase Local Configuration
+# =============================================================================
+# Project: the-master-os
+# Version: 1.0.0
+# =============================================================================
+
+# project_id is set via supabase link or SUPABASE_PROJECT_ID env var
+
+# =============================================================================
+# API Configuration
+# =============================================================================
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "auth", "storage"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+[db]
+port = 54322
+major_version = 15
+
+# =============================================================================
+# Auth Configuration
+# =============================================================================
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+
+# JWT expiry: access 30min, refresh 7days
+jwt_expiry = 1800
+
+# Disable new user signup (chairman-only system)
+enable_signup = false
+
+# MFA (TOTP) enabled
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+# Disable email confirmation (initial phase)
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+double_confirm_changes = false
+
+# =============================================================================
+# Studio Configuration
+# =============================================================================
+[studio]
+enabled = true
+port = 54323
+
+# =============================================================================
+# Realtime Configuration
+# =============================================================================
+[realtime]
+enabled = true
+
+# =============================================================================
+# Storage Configuration
+# =============================================================================
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+# =============================================================================
+# Analytics Configuration
+# =============================================================================
+[analytics]
+enabled = false

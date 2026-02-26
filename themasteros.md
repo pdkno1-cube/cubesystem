@@ -1,4 +1,4 @@
-🌌 [The Master OS] 통합 기획 및 아키텍처 마스터 설계도 (Claude Code 전달용 최종본)
+# 🌌 [The Master OS] 통합 기획 및 아키텍처 마스터 설계도 (Claude Code 전달용 최종본)
 
 [Claude Code를 위한 시스템 컨텍스트 및 지침]
 본 문서는 'The Master Holdings'의 총괄 회장(사용자)이 다수의 비즈니스를 통합 통제하고, 향후 B2B SaaS로 확장하기 위해 구상한 **<1인 100에이전트 자율 경영 시스템>**의 마스터 기획서입니다.

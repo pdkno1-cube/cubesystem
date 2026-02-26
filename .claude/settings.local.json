@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(cd:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(git commit:*)",
+      "Bash(claude:*)",
+      "Bash(mkdir:*)",
+      "Bash(pnpm install:*)",
+      "Bash(where npm:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm:*)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(tasklist:*)"
     ]
   }
 }
