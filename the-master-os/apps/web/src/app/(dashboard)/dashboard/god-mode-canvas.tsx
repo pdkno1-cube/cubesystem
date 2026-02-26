@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ReactFlow,
   Background,
@@ -108,6 +109,8 @@ function buildEdges(workspaces: WorkspaceOverview[]): Edge[] {
 // ─── Component ───────────────────────────────────────────────────
 
 export function GodModeCanvas({ workspaces, agentPool }: GodModeCanvasProps) {
+  const router = useRouter();
+
   const nodes = useMemo(
     () => buildNodes(workspaces, agentPool),
     [workspaces, agentPool]
@@ -118,9 +121,9 @@ export function GodModeCanvas({ workspaces, agentPool }: GodModeCanvasProps) {
   const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     if (node.type === 'workspace' && node.data && typeof node.data === 'object' && 'slug' in node.data) {
       const slug = (node.data as { slug: string }).slug;
-      window.location.href = `/workspaces/${slug}`;
+      router.push(`/workspaces/${slug}`);
     }
-  }, []);
+  }, [router]);
 
   // ─── Empty state ─────────────────────────────────────────────
 

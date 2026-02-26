@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { untyped } from '@/lib/supabase/untyped';
 import { encrypt } from '@/lib/crypto';
+import { apiError, handleApiError } from '@/lib/api-response';
 import type { Database } from '@/types/database';
 
 type SecretVaultRow = Database['public']['Tables']['secret_vault']['Row'];
@@ -34,10 +35,6 @@ const createSecretSchema = z.object({
 });
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-function errorResponse(code: string, message: string, status: number) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
 
 function generateSlug(name: string): string {
   return name
@@ -83,7 +80,7 @@ export async function GET(_request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse('UNAUTHORIZED', '인증이 필요합니다.', 401);
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
     // Fetch secrets with workspace name via join
@@ -99,7 +96,7 @@ export async function GET(_request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (queryError) {
-      return errorResponse(
+      return apiError(
         'DB_ERROR',
         `시크릿 조회 실패: ${queryError.message}`,
         500,
@@ -120,12 +117,8 @@ export async function GET(_request: NextRequest) {
       data: sanitized,
       total: sanitized.length,
     });
-  } catch {
-    return errorResponse(
-      'INTERNAL_ERROR',
-      '서버 내부 오류가 발생했습니다.',
-      500,
-    );
+  } catch (error) {
+    return handleApiError(error, "vault.GET");
   }
 }
 
@@ -140,7 +133,7 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse('UNAUTHORIZED', '인증이 필요합니다.', 401);
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
     // Parse & validate request body
@@ -149,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     if (!parseResult.success) {
       const firstError = parseResult.error.errors[0];
-      return errorResponse(
+      return apiError(
         'VALIDATION_ERROR',
         firstError?.message ?? '입력 값이 올바르지 않습니다.',
         400,
@@ -191,13 +184,13 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       const err = insertError as { message: string; code?: string };
       if (err.code === '23505') {
-        return errorResponse(
+        return apiError(
           'DUPLICATE_SECRET',
           '이미 동일한 이름의 시크릿이 존재합니다.',
           409,
         );
       }
-      return errorResponse(
+      return apiError(
         'DB_ERROR',
         `시크릿 생성 실패: ${err.message}`,
         500,
@@ -214,11 +207,7 @@ export async function POST(request: NextRequest) {
       { data: sanitizeSecret({ ...secretRow, workspace_name }) },
       { status: 201 },
     );
-  } catch {
-    return errorResponse(
-      'INTERNAL_ERROR',
-      '서버 내부 오류가 발생했습니다.',
-      500,
-    );
+  } catch (error) {
+    return handleApiError(error, "vault.POST");
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { untyped } from '@/lib/supabase/untyped';
+import { handleApiError } from '@/lib/api-response';
 import type { Database } from '@/types/database';
 
 type AgentRow = Database['public']['Tables']['agents']['Row'];
@@ -166,12 +167,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ data: filteredAgents });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "agents.GET");
   }
 }
 
@@ -250,11 +247,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ data: agent }, { status: 201 });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "agents.POST");
   }
 }

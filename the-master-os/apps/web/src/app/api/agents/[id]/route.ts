@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { untyped } from '@/lib/supabase/untyped';
 import { z } from 'zod';
+import { handleApiError } from '@/lib/api-response';
 import type { Database } from '@/types/database';
 
 type AgentRow = Database['public']['Tables']['agents']['Row'];
@@ -87,12 +88,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json({ data: agent });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "agents-id.GET");
   }
 }
 
@@ -160,12 +157,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({ data: agent });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "agents-id.PATCH");
   }
 }
 
@@ -223,11 +216,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({ data: { success: true } });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "agents-id.DELETE");
   }
 }

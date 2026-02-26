@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { untyped } from '@/lib/supabase/untyped';
+import { apiError, handleApiError } from '@/lib/api-response';
 import type { Database } from '@/types/database';
 
 type SecretVaultRow = Database['public']['Tables']['secret_vault']['Row'];
@@ -25,10 +26,6 @@ const updateSecretSchema = z.object({
 });
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-function errorResponse(code: string, message: string, status: number) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
 
 /**
  * Strips sensitive fields from a secret row.
@@ -58,7 +55,7 @@ export async function DELETE(
     const { id } = await context.params;
     const idResult = uuidSchema.safeParse(id);
     if (!idResult.success) {
-      return errorResponse('INVALID_ID', '유효하지 않은 시크릿 ID입니다.', 400);
+      return apiError('INVALID_ID', '유효하지 않은 시크릿 ID입니다.', 400);
     }
 
     const supabase = await createClient();
@@ -68,7 +65,7 @@ export async function DELETE(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse('UNAUTHORIZED', '인증이 필요합니다.', 401);
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
     // Check if secret exists and is not already deleted
@@ -81,7 +78,7 @@ export async function DELETE(
     const existing = rawExisting as Pick<SecretVaultRow, 'id' | 'deleted_at'> | null;
 
     if (!existing || existing.deleted_at) {
-      return errorResponse('NOT_FOUND', '시크릿을 찾을 수 없습니다.', 404);
+      return apiError('NOT_FOUND', '시크릿을 찾을 수 없습니다.', 404);
     }
 
     // Soft delete: set deleted_at
@@ -95,7 +92,7 @@ export async function DELETE(
 
     if (deleteError) {
       const err = deleteError as { message: string };
-      return errorResponse(
+      return apiError(
         'DB_ERROR',
         `시크릿 삭제 실패: ${err.message}`,
         500,
@@ -103,12 +100,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch {
-    return errorResponse(
-      'INTERNAL_ERROR',
-      '서버 내부 오류가 발생했습니다.',
-      500,
-    );
+  } catch (error) {
+    return handleApiError(error, "vault.DELETE");
   }
 }
 
@@ -122,7 +115,7 @@ export async function PATCH(
     const { id } = await context.params;
     const idResult = uuidSchema.safeParse(id);
     if (!idResult.success) {
-      return errorResponse('INVALID_ID', '유효하지 않은 시크릿 ID입니다.', 400);
+      return apiError('INVALID_ID', '유효하지 않은 시크릿 ID입니다.', 400);
     }
 
     const supabase = await createClient();
@@ -132,7 +125,7 @@ export async function PATCH(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse('UNAUTHORIZED', '인증이 필요합니다.', 401);
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
     // Parse & validate request body
@@ -141,7 +134,7 @@ export async function PATCH(
 
     if (!parseResult.success) {
       const firstError = parseResult.error.errors[0];
-      return errorResponse(
+      return apiError(
         'VALIDATION_ERROR',
         firstError?.message ?? '입력 값이 올바르지 않습니다.',
         400,
@@ -158,7 +151,7 @@ export async function PATCH(
     const existing = rawExisting as Pick<SecretVaultRow, 'id' | 'deleted_at'> | null;
 
     if (!existing || existing.deleted_at) {
-      return errorResponse('NOT_FOUND', '시크릿을 찾을 수 없습니다.', 404);
+      return apiError('NOT_FOUND', '시크릿을 찾을 수 없습니다.', 404);
     }
 
     const { name, category } = parseResult.data;
@@ -184,7 +177,7 @@ export async function PATCH(
 
     if (updateError || !rawUpdated) {
       const err = updateError as { message?: string } | null;
-      return errorResponse(
+      return apiError(
         'DB_ERROR',
         `시크릿 수정 실패: ${err?.message ?? 'Unknown error'}`,
         500,
@@ -196,11 +189,7 @@ export async function PATCH(
     return NextResponse.json({
       data: sanitizeSecret(updated),
     });
-  } catch {
-    return errorResponse(
-      'INTERNAL_ERROR',
-      '서버 내부 오류가 발생했습니다.',
-      500,
-    );
+  } catch (error) {
+    return handleApiError(error, "vault.PATCH");
   }
 }

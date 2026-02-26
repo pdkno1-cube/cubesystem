@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { handleApiError } from '@/lib/api-response';
 
 export async function POST() {
   try {
@@ -20,15 +21,7 @@ export async function POST() {
     }
 
     return NextResponse.json({ data: { success: true } });
-  } catch {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'An unexpected error occurred during logout.',
-        },
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "auth-logout.POST");
   }
 }

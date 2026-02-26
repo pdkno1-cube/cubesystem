@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { handleApiError } from '@/lib/api-response';
 
 interface AgentBasic {
   id: string;
@@ -219,11 +220,7 @@ export async function GET() {
         audit_logs: auditLogs,
       },
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "dashboard.GET");
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { handleApiError } from '@/lib/api-response';
 
 export async function POST() {
   try {
@@ -22,22 +23,14 @@ export async function POST() {
       );
     }
 
+    // SECURITY: Do not expose tokens in the response body.
+    // Supabase SSR manages sessions via HttpOnly cookies automatically.
     return NextResponse.json({
       data: {
-        accessToken: session.access_token,
-        refreshToken: session.refresh_token,
         expiresAt: session.expires_at ?? 0,
       },
     });
-  } catch {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'An unexpected error occurred during session refresh.',
-        },
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "auth-refresh.POST");
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError, handleApiError, type ApiErrorBody } from "@/lib/api-response";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -24,20 +25,10 @@ interface PipelinesResponse {
   total: number;
 }
 
-interface PipelinesErrorResponse {
-  error: { code: string; message: string };
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function errorResponse(code: string, message: string, status: number) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
-
 // ── GET /api/pipelines ──────────────────────────────────────────────
 
 export async function GET(): Promise<
-  NextResponse<PipelinesResponse | PipelinesErrorResponse>
+  NextResponse<PipelinesResponse | ApiErrorBody>
 > {
   try {
     const supabase = await createClient();
@@ -47,7 +38,7 @@ export async function GET(): Promise<
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse("UNAUTHORIZED", "인증이 필요합니다.", 401);
+      return apiError("UNAUTHORIZED", "인증이 필요합니다.", 401);
     }
 
     // Fetch pipelines (soft-delete 필터)
@@ -58,7 +49,7 @@ export async function GET(): Promise<
       .order("created_at", { ascending: false });
 
     if (pipelinesError) {
-      return errorResponse(
+      return apiError(
         "DB_ERROR",
         `파이프라인 조회 실패: ${pipelinesError.message}`,
         500,
@@ -76,7 +67,7 @@ export async function GET(): Promise<
       : { data: [] as { pipeline_id: string; status: string; created_at: string }[], error: null };
 
     if (execError) {
-      return errorResponse(
+      return apiError(
         "DB_ERROR",
         `실행 통계 조회 실패: ${execError.message}`,
         500,
@@ -145,11 +136,7 @@ export async function GET(): Promise<
       data,
       total: data.length,
     });
-  } catch {
-    return errorResponse(
-      "INTERNAL_ERROR",
-      "서버 내부 오류가 발생했습니다.",
-      500,
-    );
+  } catch (error) {
+    return handleApiError(error, "pipelines.GET");
   }
 }

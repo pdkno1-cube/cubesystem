@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { handleApiError } from '@/lib/api-response';
 
 const mfaVerifySchema = z.object({
   factorId: z.string().min(1, 'Factor ID is required'),
@@ -63,15 +64,7 @@ export async function POST(request: Request) {
           : null,
       },
     });
-  } catch {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'An unexpected error occurred during MFA verification.',
-        },
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "auth-mfa-verify.POST");
   }
 }

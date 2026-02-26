@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { handleApiError } from '@/lib/api-response';
 
 export async function POST() {
   try {
@@ -39,23 +40,16 @@ export async function POST() {
       );
     }
 
+    // SECURITY: Do not expose the raw TOTP secret in the response.
+    // The QR code already encodes the secret for scanning.
     return NextResponse.json({
       data: {
         factorId: data.id,
         totpUri: data.totp.uri,
         qrCode: data.totp.qr_code,
-        secret: data.totp.secret,
       },
     });
-  } catch {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'An unexpected error occurred during MFA enrollment.',
-        },
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "auth-mfa-enroll.POST");
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { handleApiError } from '@/lib/api-response';
 import type { Database } from '@/types/database';
 
 type UserRow = Database['public']['Tables']['users']['Row'];
@@ -52,15 +53,7 @@ export async function GET() {
         createdAt: profile?.created_at ?? user.created_at,
       },
     });
-  } catch {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'An unexpected error occurred.',
-        },
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "auth-me.GET");
   }
 }

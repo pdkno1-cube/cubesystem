@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { apiError, handleApiError } from '@/lib/api-response';
 
 // ── Zod Schemas ────────────────────────────────────────────────────
 
@@ -45,14 +46,6 @@ function generateSlug(name: string): string {
     .concat('-', Date.now().toString(36));
 }
 
-function errorResponse(
-  code: string,
-  message: string,
-  status: number,
-) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
-
 // ── GET /api/workspaces ────────────────────────────────────────────
 
 export async function GET(_request: NextRequest) {
@@ -64,7 +57,7 @@ export async function GET(_request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse('UNAUTHORIZED', '인증이 필요합니다.', 401);
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
     // Fetch workspaces (RLS auto-applied via owner_id matching auth.uid())
@@ -75,7 +68,7 @@ export async function GET(_request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (wsError) {
-      return errorResponse(
+      return apiError(
         'DB_ERROR',
         `워크스페이스 조회 실패: ${wsError.message}`,
         500,
@@ -127,12 +120,8 @@ export async function GET(_request: NextRequest) {
       data: workspacesWithStats,
       count: workspacesWithStats.length,
     });
-  } catch {
-    return errorResponse(
-      'INTERNAL_ERROR',
-      '서버 내부 오류가 발생했습니다.',
-      500,
-    );
+  } catch (error) {
+    return handleApiError(error, "workspaces.GET");
   }
 }
 
@@ -147,7 +136,7 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse('UNAUTHORIZED', '인증이 필요합니다.', 401);
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
     // Parse & validate request body
@@ -156,7 +145,7 @@ export async function POST(request: NextRequest) {
 
     if (!parseResult.success) {
       const firstError = parseResult.error.errors[0];
-      return errorResponse(
+      return apiError(
         'VALIDATION_ERROR',
         firstError?.message ?? '입력 값이 올바르지 않습니다.',
         400,
@@ -185,13 +174,13 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       if (insertError.code === '23505') {
-        return errorResponse(
+        return apiError(
           'DUPLICATE_SLUG',
           '이미 사용 중인 slug입니다. 다른 이름을 사용해주세요.',
           409,
         );
       }
-      return errorResponse(
+      return apiError(
         'DB_ERROR',
         `워크스페이스 생성 실패: ${insertError.message}`,
         500,
@@ -216,11 +205,7 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 },
     );
-  } catch {
-    return errorResponse(
-      'INTERNAL_ERROR',
-      '서버 내부 오류가 발생했습니다.',
-      500,
-    );
+  } catch (error) {
+    return handleApiError(error, "workspaces.POST");
   }
 }

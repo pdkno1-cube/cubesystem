@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError, handleApiError, escapeLike, type ApiErrorBody } from "@/lib/api-response";
+
+const MAX_PAGE_LIMIT = 100;
 
 interface AuditLogEntry {
   id: string;
@@ -24,17 +27,9 @@ interface AuditLogsResponse {
   limit: number;
 }
 
-interface AuditLogsErrorResponse {
-  error: { code: string; message: string };
-}
-
-function errorResponse(code: string, message: string, status: number) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
-
 export async function GET(
   request: NextRequest,
-): Promise<NextResponse<AuditLogsResponse | AuditLogsErrorResponse>> {
+): Promise<NextResponse<AuditLogsResponse | ApiErrorBody>> {
   try {
     const supabase = await createClient();
 
@@ -43,12 +38,15 @@ export async function GET(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse("UNAUTHORIZED", "인증이 필요합니다.", 401);
+      return apiError("UNAUTHORIZED", "인증이 필요합니다.", 401);
     }
 
     const { searchParams } = request.nextUrl;
-    const page = parseInt(searchParams.get("page") ?? "1", 10);
-    const limit = parseInt(searchParams.get("limit") ?? "20", 10);
+    const page = Math.max(parseInt(searchParams.get("page") ?? "1", 10), 1);
+    const limit = Math.min(
+      Math.max(parseInt(searchParams.get("limit") ?? "20", 10), 1),
+      MAX_PAGE_LIMIT,
+    );
     const action = searchParams.get("action");
     const workspaceId = searchParams.get("workspace_id");
     const severity = searchParams.get("severity");
@@ -62,7 +60,7 @@ export async function GET(
       .order("created_at", { ascending: false });
 
     if (action) {
-      query = query.ilike("action", `%${action}%`);
+      query = query.ilike("action", `%${escapeLike(action)}%`);
     }
     if (workspaceId) {
       query = query.eq("workspace_id", workspaceId);
@@ -76,7 +74,7 @@ export async function GET(
     const { data: logs, error: logsError, count } = await query;
 
     if (logsError) {
-      return errorResponse(
+      return apiError(
         "DB_ERROR",
         `감사 로그 조회 실패: ${logsError.message}`,
         500,
@@ -149,7 +147,7 @@ export async function GET(
       page,
       limit,
     });
-  } catch {
-    return errorResponse("INTERNAL_ERROR", "서버 내부 오류가 발생했습니다.", 500);
+  } catch (error) {
+    return handleApiError(error, "audit-logs.GET");
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { untyped } from '@/lib/supabase/untyped';
 import { z } from 'zod';
+import { handleApiError } from '@/lib/api-response';
 
 const releaseAgentSchema = z.object({
   agent_id: z.string().uuid(),
@@ -99,11 +100,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ data: { success: true } });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, "agents-release.POST");
   }
 }

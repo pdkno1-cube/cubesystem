@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError, handleApiError, type ApiErrorBody } from "@/lib/api-response";
+
+const RECENT_TRANSACTION_LIMIT = 20;
 
 interface CreditTransaction {
   id: string;
@@ -31,16 +34,8 @@ interface CreditsResponse {
   workspace_usage: WorkspaceUsage[];
 }
 
-interface CreditsErrorResponse {
-  error: { code: string; message: string };
-}
-
-function errorResponse(code: string, message: string, status: number) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
-
 export async function GET(): Promise<
-  NextResponse<CreditsResponse | CreditsErrorResponse>
+  NextResponse<CreditsResponse | ApiErrorBody>
 > {
   try {
     const supabase = await createClient();
@@ -50,7 +45,7 @@ export async function GET(): Promise<
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return errorResponse("UNAUTHORIZED", "인증이 필요합니다.", 401);
+      return apiError("UNAUTHORIZED", "인증이 필요합니다.", 401);
     }
 
     // Fetch all credits for overview calculation
@@ -60,7 +55,7 @@ export async function GET(): Promise<
       .order("created_at", { ascending: false });
 
     if (creditsError) {
-      return errorResponse(
+      return apiError(
         "DB_ERROR",
         `크레딧 조회 실패: ${creditsError.message}`,
         500,
@@ -96,7 +91,7 @@ export async function GET(): Promise<
     };
 
     // Recent transactions (top 20) — need workspace names
-    const recentRecords = records.slice(0, 20);
+    const recentRecords = records.slice(0, RECENT_TRANSACTION_LIMIT);
 
     const workspaceIds = [
       ...new Set(
@@ -155,7 +150,7 @@ export async function GET(): Promise<
       recent_transactions: recentTransactions,
       workspace_usage: workspaceUsage,
     });
-  } catch {
-    return errorResponse("INTERNAL_ERROR", "서버 내부 오류가 발생했습니다.", 500);
+  } catch (error) {
+    return handleApiError(error, "credits.GET");
   }
 }
