@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
 
+    # --- LLM Providers ---
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+
     # --- Logging ---
     log_level: str = "INFO"
     log_format: Literal["json", "text"] = "json"
