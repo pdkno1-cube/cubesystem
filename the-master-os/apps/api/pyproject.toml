@@ -44,6 +44,9 @@ dependencies = [
 
     # Task Scheduling
     "apscheduler>=3.10",
+
+    # Email validation (required for pydantic EmailStr)
+    "email-validator>=2.2",
 ]
 
 [project.optional-dependencies]
