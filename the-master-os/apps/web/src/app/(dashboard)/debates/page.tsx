@@ -76,37 +76,66 @@ export default async function DebatesPage() {
 
         const debateRows = (debatesData ?? []) as unknown as DebateRow[];
 
-        // For each debate, enrich with agent info + message count
-        for (const debate of debateRows) {
-          const { data: messages } = await supabase
+        // ── Batch: fetch ALL debate_messages in one query ──────────────
+        const debateIds = debateRows.map((d) => d.id);
+
+        if (debateIds.length > 0) {
+          const { data: allMessages } = await supabase
             .from('debate_messages')
-            .select('agent_id')
-            .eq('debate_id', debate.id);
+            .select('debate_id, agent_id')
+            .in('debate_id', debateIds);
 
-          const messageRows = (messages ?? []) as unknown as Array<{ agent_id: string }>;
-          const uniqueAgentIds = [...new Set(messageRows.map((m) => m.agent_id))];
+          const messageRows = (allMessages ?? []) as unknown as Array<{
+            debate_id: string;
+            agent_id: string;
+          }>;
 
-          let debateAgents: AgentSummary[] = [];
-          if (uniqueAgentIds.length > 0) {
+          // Group messages by debate_id
+          const messagesByDebate = new Map<
+            string,
+            Array<{ debate_id: string; agent_id: string }>
+          >();
+          for (const msg of messageRows) {
+            const existing = messagesByDebate.get(msg.debate_id) ?? [];
+            existing.push(msg);
+            messagesByDebate.set(msg.debate_id, existing);
+          }
+
+          // ── Batch: fetch ALL unique agents in one query ──────────────
+          const allAgentIds = [...new Set(messageRows.map((m) => m.agent_id))];
+          const agentMap = new Map<string, AgentSummary>();
+
+          if (allAgentIds.length > 0) {
             const { data: agentsData } = await supabase
               .from('agents')
               .select('id, name, icon, category')
-              .in('id', uniqueAgentIds);
+              .in('id', allAgentIds);
 
-            debateAgents = (agentsData ?? []) as AgentSummary[];
+            for (const agent of (agentsData ?? []) as AgentSummary[]) {
+              agentMap.set(agent.id, agent);
+            }
           }
 
-          debates.push({
-            id: debate.id,
-            workspace_id: debate.workspace_id,
-            topic: debate.topic,
-            status: debate.status,
-            summary: debate.summary,
-            conclusion: debate.conclusion,
-            created_at: debate.created_at,
-            agents: debateAgents,
-            message_count: messageRows.length,
-          });
+          // ── Map: assemble DebateListItem from in-memory data ─────────
+          for (const debate of debateRows) {
+            const debateMessages = messagesByDebate.get(debate.id) ?? [];
+            const uniqueIds = [...new Set(debateMessages.map((m) => m.agent_id))];
+            const debateAgents = uniqueIds
+              .map((aid) => agentMap.get(aid))
+              .filter((a): a is AgentSummary => a !== undefined);
+
+            debates.push({
+              id: debate.id,
+              workspace_id: debate.workspace_id,
+              topic: debate.topic,
+              status: debate.status,
+              summary: debate.summary,
+              conclusion: debate.conclusion,
+              created_at: debate.created_at,
+              agents: debateAgents,
+              message_count: debateMessages.length,
+            });
+          }
         }
       }
 

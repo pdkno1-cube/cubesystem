@@ -13,6 +13,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorRetry } from '@/components/ui/error-retry';
 import { IncidentDetailPanel } from './incident-detail-panel';
 
 // ---------------------------------------------------------------------------
@@ -183,7 +185,10 @@ function IncidentRow({
           <span className="truncate text-sm font-medium text-gray-800">
             {incident.source_service}
           </span>
-          <span className={clsx('rounded-full px-2 py-0.5 text-[10px] font-medium', sevStyle.bg, sevStyle.text)}>
+          <span
+            className={clsx('rounded-full px-2 py-0.5 text-[10px] font-medium', sevStyle.bg, sevStyle.text)}
+            aria-label={`심각도: ${incident.severity}`}
+          >
             {incident.severity.toUpperCase()}
           </span>
           <span className={clsx('rounded-full px-2 py-0.5 text-[10px] font-medium', statusStyle.bg, statusStyle.text)}>
@@ -341,6 +346,7 @@ export function HealingClient({
   const [isRefetching, setIsRefetching] = useState(false);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [isTriggerLoading, setIsTriggerLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch data on filter change
   const fetchData = useCallback(async () => {
@@ -348,6 +354,7 @@ export function HealingClient({
       return;
     }
     setIsRefetching(true);
+    setError(null);
     try {
       const params = new URLSearchParams({ workspace_id: workspaceId, limit: '50' });
       if (severityFilter !== 'all') {
@@ -358,19 +365,21 @@ export function HealingClient({
       }
 
       const resp = await fetch(`/api/healing?${params.toString()}`);
-      if (resp.ok) {
-        const body = (await resp.json()) as {
-          data: {
-            incidents: HealingIncident[];
-            total: number;
-            stats: HealingStats;
-          };
-        };
-        setIncidents(body.data.incidents);
-        setStats(body.data.stats);
+      if (!resp.ok) {
+        throw new Error('인시던트 데이터를 불러오는 데 실패했습니다.');
       }
-    } catch (error) {
-      Sentry.captureException(error, { tags: { context: 'healing.fetchData' } });
+      const body = (await resp.json()) as {
+        data: {
+          incidents: HealingIncident[];
+          total: number;
+          stats: HealingStats;
+        };
+      };
+      setIncidents(body.data.incidents);
+      setStats(body.data.stats);
+    } catch (err) {
+      Sentry.captureException(err, { tags: { context: 'healing.fetchData' } });
+      setError('인시던트 데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setIsRefetching(false);
     }
@@ -433,6 +442,10 @@ export function HealingClient({
     }
     return `${(seconds / 3600).toFixed(1)}시간`;
   };
+
+  if (error) {
+    return <ErrorRetry message={error} onRetry={() => { void fetchData(); }} />;
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -534,15 +547,15 @@ export function HealingClient({
         {/* Incident timeline */}
         <div className="flex flex-col gap-2">
           {filteredIncidents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 py-16 text-center">
-              <HeartPulse className="h-10 w-10 text-gray-300" />
-              <p className="mt-3 text-sm font-medium text-gray-500">인시던트 없음</p>
-              <p className="mt-1 text-xs text-gray-400">
-                {severityFilter !== 'all' || statusFilter !== 'all'
-                  ? '필터 조건에 맞는 인시던트가 없습니다'
-                  : '시스템이 정상 운영 중입니다'}
-              </p>
-            </div>
+            <EmptyState
+              icon={HeartPulse}
+              title="감지된 인시던트가 없습니다"
+              description={
+                severityFilter !== 'all' || statusFilter !== 'all'
+                  ? '필터 조건에 맞는 인시던트가 없습니다.'
+                  : '시스템이 정상 운영 중입니다.'
+              }
+            />
           ) : (
             filteredIncidents.map((incident) => (
               <IncidentRow

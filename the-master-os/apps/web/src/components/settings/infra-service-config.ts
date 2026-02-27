@@ -22,6 +22,8 @@ export interface UpgradePath {
   triggerCondition: string;
 }
 
+export type ConnectionStatus = 'connected' | 'not_configured' | 'error';
+
 export interface ServiceData {
   id: string;
   name: string;
@@ -32,6 +34,7 @@ export interface ServiceData {
   isVariableCost: boolean;
   costLabel: string;
   status: ServiceStatus;
+  connectionStatus: ConnectionStatus;
   metrics: UsageMetric[];
   upgrade: UpgradePath;
   logoEmoji: string;

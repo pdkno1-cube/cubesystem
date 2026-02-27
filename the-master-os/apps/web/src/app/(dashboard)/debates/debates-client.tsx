@@ -12,6 +12,8 @@ import {
   Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorRetry } from '@/components/ui/error-retry';
 import { DebateTimeline } from '@/components/debates/DebateTimeline';
 import type { DebateMessage } from '@/components/debates/DebateMessageBubble';
 
@@ -98,6 +100,27 @@ export function DebatesClient({
   const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'concluded'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch debates (used for retry)
+  const fetchDebates = useCallback(async () => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/debates?workspace_id=${workspaceId}`);
+      if (!res.ok) {
+        throw new Error('토론 목록을 불러오는 데 실패했습니다.');
+      }
+      const json: unknown = await res.json();
+      const result = json as { data?: DebateListItem[] };
+      setDebates(result.data ?? []);
+    } catch (err) {
+      Sentry.captureException(err, { tags: { context: 'debates.fetchDebates' } });
+      setError('토론 목록을 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [workspaceId]);
 
   // Filtered debates
   const filteredDebates = debates.filter((d) => {
@@ -185,6 +208,11 @@ export function DebatesClient({
     );
   }, []);
 
+  // Show error state
+  if (error) {
+    return <ErrorRetry message={error} onRetry={() => { void fetchDebates(); }} />;
+  }
+
   // Show detail view
   if (selectedDebate) {
     return (
@@ -269,23 +297,16 @@ export function DebatesClient({
 
       {/* Debate List */}
       {!isLoading && filteredDebates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-200 py-16">
-          <MessageSquare className="h-12 w-12 text-gray-300" />
-          <p className="mt-4 text-sm font-medium text-gray-500">
-            {searchTerm || statusFilter !== 'all'
-              ? '검색 결과가 없습니다'
-              : '아직 토론이 없습니다'}
-          </p>
-          {!searchTerm && statusFilter === 'all' ? (
-            <button
-              type="button"
-              onClick={() => setIsCreateOpen(true)}
-              className="mt-4 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              첫 토론 시작하기
-            </button>
-          ) : null}
-        </div>
+        <EmptyState
+          icon={MessageSquare}
+          title="아직 토론이 없습니다"
+          description={
+            searchTerm || statusFilter !== 'all'
+              ? '검색 결과가 없습니다.'
+              : '에이전트들과 다양한 관점의 토론을 시작해보세요.'
+          }
+          action={!searchTerm && statusFilter === 'all' ? { label: '새 토론 시작', onClick: () => { setIsCreateOpen(true); } } : undefined}
+        />
       ) : null}
 
       {!isLoading && filteredDebates.length > 0 ? (

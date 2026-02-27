@@ -39,7 +39,7 @@ export function DashboardClient({ data }: DashboardClientProps) {
       </div>
 
       {/* KPI Strip - 5 Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
         <StatCard
           icon={Building2}
           label="워크스페이스"

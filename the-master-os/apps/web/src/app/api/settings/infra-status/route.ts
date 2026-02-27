@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import {
   worstStatus,
+  type ConnectionStatus,
   type InfraStatusResponse,
   type ServiceData,
   type UsageMetric,
@@ -10,26 +11,46 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// env var 파싱 헬퍼 (없으면 기본값)
+// ─── env var 파싱 헬퍼 (없으면 기본값) ────────────────────────
 function envNum(key: string, fallback: number): number {
   const v = process.env[key];
   const n = v ? parseFloat(v) : NaN;
   return isNaN(n) ? fallback : n;
 }
 
+/** env var 존재 여부로 connection status 판정 */
+function envConnectionStatus(...keys: string[]): ConnectionStatus {
+  for (const key of keys) {
+    const val = process.env[key];
+    if (val && val.trim().length > 0) {
+      return 'connected';
+    }
+  }
+  return 'not_configured';
+}
+
 // ─── Supabase Management API 실데이터 조회 ──────────────────────
 interface SupabaseLiveMetrics {
   dbSizeMB: number;
-  /** null = API 호출 실패 (fallback 사용) */
+  activeConnections: number;
+  region: string;
+  pgVersion: string;
   fetched: boolean;
 }
 
 async function fetchSupabaseMetrics(): Promise<SupabaseLiveMetrics> {
   const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
   const projectRef = process.env.SUPABASE_PROJECT_REF ?? process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF;
+  const fallback: SupabaseLiveMetrics = {
+    dbSizeMB: 0,
+    activeConnections: 0,
+    region: '',
+    pgVersion: '',
+    fetched: false,
+  };
 
   if (!accessToken || !projectRef) {
-    return { dbSizeMB: 0, fetched: false };
+    return fallback;
   }
 
   try {
@@ -43,28 +64,160 @@ async function fetchSupabaseMetrics(): Promise<SupabaseLiveMetrics> {
 
     if (!resp.ok) {
       Sentry.captureException(
-        new Error(`Supabase Management API ${resp.status}: ${resp.statusText}`),
+        new Error(`Supabase Management API ${String(resp.status)}: ${resp.statusText}`),
         { tags: { context: 'infra-status.supabase-api' } },
       );
-      return { dbSizeMB: 0, fetched: false };
+      return fallback;
     }
 
     const project = (await resp.json()) as {
-      database?: { size?: number };
+      database?: { size?: number; active_connections?: number; version?: string };
       disk_usage?: number;
+      region?: string;
     };
 
-    // disk_usage는 bytes 단위로 반환됨 — MB로 변환
+    // disk_usage는 bytes 단위 — MB로 변환
     const diskBytes = project.disk_usage ?? project.database?.size ?? 0;
     const dbSizeMB = Math.round((diskBytes / (1024 * 1024)) * 10) / 10;
+    const activeConnections = project.database?.active_connections ?? 0;
+    const region = project.region ?? '';
+    const pgVersion = project.database?.version ?? '';
 
-    return { dbSizeMB, fetched: true };
+    return { dbSizeMB, activeConnections, region, pgVersion, fetched: true };
   } catch (error) {
     Sentry.captureException(error, { tags: { context: 'infra-status.supabase-api' } });
-    return { dbSizeMB: 0, fetched: false };
+    return fallback;
   }
 }
 
+// ─── LLM 크레딧 사용량 집계 (credits + agents 조인) ─────────
+interface ProviderCreditUsage {
+  anthropicCredits: number;
+  openaiCredits: number;
+  otherCredits: number;
+  fetched: boolean;
+}
+
+async function fetchProviderCreditUsage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<ProviderCreditUsage> {
+  const fallback: ProviderCreditUsage = {
+    anthropicCredits: 0,
+    openaiCredits: 0,
+    otherCredits: 0,
+    fetched: false,
+  };
+
+  try {
+    // 이번 달 시작일
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    // 이번 달 usage 트랜잭션 조회 (agent_id 포함)
+    const { data: usageRows, error: usageError } = await supabase
+      .from('credits')
+      .select('agent_id, amount')
+      .eq('transaction_type', 'usage')
+      .gte('created_at', monthStart);
+
+    if (usageError) {
+      Sentry.captureException(usageError, { tags: { context: 'infra-status.credit-usage' } });
+      return fallback;
+    }
+
+    if (!usageRows || usageRows.length === 0) {
+      return { ...fallback, fetched: true };
+    }
+
+    // 사용된 에이전트 ID 수집
+    const agentIds = [
+      ...new Set(
+        usageRows
+          .map((r) => r.agent_id as string | null)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+
+    // 에이전트별 model_provider 조회
+    const providerMap = new Map<string, string>();
+    if (agentIds.length > 0) {
+      const { data: agents } = await supabase
+        .from('agents')
+        .select('id, model_provider')
+        .in('id', agentIds);
+
+      for (const ag of agents ?? []) {
+        providerMap.set(ag.id as string, ag.model_provider as string);
+      }
+    }
+
+    // 프로바이더별 크레딧 합산
+    let anthropicCredits = 0;
+    let openaiCredits = 0;
+    let otherCredits = 0;
+
+    for (const row of usageRows) {
+      const amount = Math.abs(Number(row.amount ?? 0));
+      const agentId = row.agent_id as string | null;
+      const provider = agentId ? (providerMap.get(agentId) ?? 'unknown') : 'unknown';
+
+      if (provider === 'anthropic') {
+        anthropicCredits += amount;
+      } else if (provider === 'openai') {
+        openaiCredits += amount;
+      } else {
+        otherCredits += amount;
+      }
+    }
+
+    return {
+      anthropicCredits: Math.round(anthropicCredits * 100) / 100,
+      openaiCredits: Math.round(openaiCredits * 100) / 100,
+      otherCredits: Math.round(otherCredits * 100) / 100,
+      fetched: true,
+    };
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'infra-status.credit-usage' } });
+    return fallback;
+  }
+}
+
+// ─── Vault 시크릿 존재 여부 확인 ──────────────────────────────
+interface VaultSecretStatus {
+  resendConfigured: boolean;
+  fetched: boolean;
+}
+
+async function fetchVaultSecretStatus(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<VaultSecretStatus> {
+  const fallback: VaultSecretStatus = { resendConfigured: false, fetched: false };
+
+  try {
+    // service_name이 'resend'인 시크릿 존재 여부 확인
+    const { data: resendSecrets, error } = await supabase
+      .from('secret_vault')
+      .select('id')
+      .eq('service_name', 'resend')
+      .is('deleted_at', null)
+      .limit(1);
+
+    if (error) {
+      Sentry.captureException(error, { tags: { context: 'infra-status.vault-check' } });
+      return fallback;
+    }
+
+    return {
+      resendConfigured: (resendSecrets ?? []).length > 0,
+      fetched: true,
+    };
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'infra-status.vault-check' } });
+    return fallback;
+  }
+}
+
+// ─── 메인 핸들러 ─────────────────────────────────────────────
 export async function GET() {
   // 인증 확인
   const supabase = await createClient();
@@ -73,27 +226,63 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // ─── Supabase 실데이터 조회 (비동기) ──────────────────────────
-  const supabaseLive = await fetchSupabaseMetrics();
+  // 비동기 데이터 3종 병렬 조회
+  const [supabaseLive, creditUsage, vaultStatus] = await Promise.all([
+    fetchSupabaseMetrics(),
+    fetchProviderCreditUsage(supabase),
+    fetchVaultSecretStatus(supabase),
+  ]);
 
   // ─── 사용량 값 (env var 주입 or 기본 mock) ─────────────────────
   const vercelBandwidthGB    = envNum('VERCEL_BANDWIDTH_GB', 12.4);
   const vercelFnInvocations  = envNum('VERCEL_FN_INVOCATIONS', 8200);
   const railwayUsageUsd      = envNum('RAILWAY_CURRENT_USAGE_USD', 2.80);
   const railwayMemoryMB      = envNum('RAILWAY_MEMORY_MB', 380);
+
   // Supabase: 실데이터 > env var > 기본값 순서
   const supabaseDbMB         = supabaseLive.fetched
     ? supabaseLive.dbSizeMB
     : envNum('SUPABASE_DB_MB', 47);
   const supabaseMau          = envNum('SUPABASE_MAU', 3);
   const supabaseBandwidthGB  = envNum('SUPABASE_BANDWIDTH_GB', 0.8);
-  const anthropicSpendUsd    = envNum('ANTHROPIC_MONTHLY_SPEND_USD', 3.20);
+
+  // LLM: 크레딧 테이블 실데이터 > env var > 기본값
+  const anthropicSpendUsd    = creditUsage.fetched && creditUsage.anthropicCredits > 0
+    ? creditUsage.anthropicCredits
+    : envNum('ANTHROPIC_MONTHLY_SPEND_USD', 3.20);
   const anthropicBudgetUsd   = envNum('ANTHROPIC_MONTHLY_BUDGET_USD', 50);
+  const openaiSpendUsd       = creditUsage.fetched && creditUsage.openaiCredits > 0
+    ? creditUsage.openaiCredits
+    : envNum('OPENAI_MONTHLY_SPEND_USD', 0);
+  const openaiBudgetUsd      = envNum('OPENAI_MONTHLY_BUDGET_USD', 20);
+
   const resendEmailsSent     = envNum('RESEND_EMAILS_SENT', 127);
   const sentryEventsUsed     = envNum('SENTRY_EVENTS_USED', 230);
   const gdriveStorageGB      = envNum('GDRIVE_STORAGE_GB', 0.31);
-  const openaiSpendUsd       = envNum('OPENAI_MONTHLY_SPEND_USD', 0);
-  const openaiBudgetUsd      = envNum('OPENAI_MONTHLY_BUDGET_USD', 20);
+
+  // ─── connection status 계산 ───────────────────────────────────
+  const anthropicConnStatus  = envConnectionStatus('ANTHROPIC_API_KEY');
+  const openaiConnStatus     = envConnectionStatus('OPENAI_API_KEY');
+  const sentryConnStatus     = envConnectionStatus('SENTRY_DSN', 'NEXT_PUBLIC_SENTRY_DSN');
+  const resendConnStatus: ConnectionStatus = vaultStatus.fetched
+    ? (vaultStatus.resendConfigured ? 'connected' : 'not_configured')
+    : 'not_configured';
+
+  // Supabase는 Management API 응답 성공 여부로 판정
+  const supabaseConnStatus: ConnectionStatus = supabaseLive.fetched ? 'connected' : (
+    process.env.NEXT_PUBLIC_SUPABASE_URL ? 'connected' : 'not_configured'
+  );
+
+  // Railway는 FASTAPI_URL 존재 여부로 판정
+  const railwayConnStatus = envConnectionStatus('FASTAPI_URL', 'NEXT_PUBLIC_FASTAPI_URL');
+
+  // Vercel은 배포 환경이면 항상 connected
+  const vercelConnStatus: ConnectionStatus = process.env.VERCEL ? 'connected' : (
+    envConnectionStatus('VERCEL_URL', 'NEXT_PUBLIC_VERCEL_URL')
+  );
+
+  // Google Drive는 MCP connection 기반 — env var 또는 vault
+  const gdriveConnStatus = envConnectionStatus('GOOGLE_SERVICE_ACCOUNT_KEY');
 
   // ─── 메트릭 빌더 ───────────────────────────────────────────────
   function metric(label: string, current: number, limit: number, unit: string): UsageMetric {
@@ -118,6 +307,7 @@ export async function GET() {
         isVariableCost: false,
         costLabel: '무료',
         status: worstStatus(metrics),
+        connectionStatus: vercelConnStatus,
         metrics,
         logoEmoji: '▲',
         upgrade: {
@@ -146,6 +336,7 @@ export async function GET() {
         isVariableCost: true,
         costLabel: `$${railwayUsageUsd.toFixed(2)} / $5.00`,
         status: worstStatus(metrics),
+        connectionStatus: railwayConnStatus,
         metrics,
         logoEmoji: '🚂',
         upgrade: {
@@ -166,17 +357,28 @@ export async function GET() {
         metric('월간 활성 유저', supabaseMau, 50_000, 'MAU'),
         metric('대역폭', supabaseBandwidthGB, 5, 'GB'),
       ];
-      const descSuffix = supabaseLive.fetched ? ' — DB 실시간 조회' : '';
+      // 실시간 연결 수 메트릭 추가 (API 성공 시)
+      if (supabaseLive.fetched && supabaseLive.activeConnections > 0) {
+        metrics.push(metric('활성 연결', supabaseLive.activeConnections, 60, '개'));
+      }
+      const descParts = ['PostgreSQL DB + 인증 + 스토리지 (BaaS)'];
+      if (supabaseLive.fetched) {
+        descParts.push('실시간 조회');
+      }
+      if (supabaseLive.region) {
+        descParts.push(supabaseLive.region);
+      }
       return {
         id: 'supabase',
         name: 'Supabase',
-        description: `PostgreSQL DB + 인증 + 스토리지 (BaaS)${descSuffix}`,
+        description: descParts.join(' — '),
         category: 'database' as const,
         currentPlan: 'Free',
         monthlyCostUsd: 0,
         isVariableCost: false,
         costLabel: '무료',
         status: worstStatus(metrics),
+        connectionStatus: supabaseConnStatus,
         metrics,
         logoEmoji: '⚡',
         upgrade: {
@@ -194,16 +396,20 @@ export async function GET() {
       const metrics = [
         metric('월 예산 사용', anthropicSpendUsd, anthropicBudgetUsd, 'USD'),
       ];
+      const usageSuffix = creditUsage.fetched && creditUsage.anthropicCredits > 0
+        ? ' (크레딧 실데이터)'
+        : '';
       return {
         id: 'anthropic',
         name: 'Anthropic (Claude API)',
-        description: 'AI 파이프라인 핵심 LLM — 에이전트 추론 엔진',
+        description: `AI 파이프라인 핵심 LLM — 에이전트 추론 엔진${usageSuffix}`,
         category: 'ai' as const,
         currentPlan: 'Pay-as-you-go',
         monthlyCostUsd: anthropicSpendUsd,
         isVariableCost: true,
         costLabel: `$${anthropicSpendUsd.toFixed(2)} 이번 달`,
         status: worstStatus(metrics),
+        connectionStatus: anthropicConnStatus,
         metrics,
         logoEmoji: '🤖',
         upgrade: {
@@ -231,6 +437,7 @@ export async function GET() {
         isVariableCost: false,
         costLabel: '무료',
         status: worstStatus(metrics),
+        connectionStatus: resendConnStatus,
         metrics,
         logoEmoji: '📧',
         upgrade: {
@@ -258,6 +465,7 @@ export async function GET() {
         isVariableCost: false,
         costLabel: '무료',
         status: worstStatus(metrics),
+        connectionStatus: sentryConnStatus,
         metrics,
         logoEmoji: '🔍',
         upgrade: {
@@ -285,6 +493,7 @@ export async function GET() {
         isVariableCost: false,
         costLabel: '무료',
         status: worstStatus(metrics),
+        connectionStatus: gdriveConnStatus,
         metrics,
         logoEmoji: '📁',
         upgrade: {
@@ -303,16 +512,20 @@ export async function GET() {
       const metrics: UsageMetric[] = openaiSpendUsd > 0
         ? [{ label: '월 예산 사용', current: openaiSpendUsd, limit: openaiBudgetUsd, unit: 'USD', usagePercent }]
         : [];
+      const usageSuffix = creditUsage.fetched && creditUsage.openaiCredits > 0
+        ? ' (크레딧 실데이터)'
+        : '';
       return {
         id: 'openai',
         name: 'OpenAI API',
-        description: 'GPT 모델 — 현재 미사용 (선택적 연동)',
+        description: `GPT 모델 — 현재 미사용 (선택적 연동)${usageSuffix}`,
         category: 'ai' as const,
         currentPlan: openaiSpendUsd > 0 ? 'Pay-as-you-go' : '미연결',
         monthlyCostUsd: openaiSpendUsd,
         isVariableCost: true,
         costLabel: openaiSpendUsd > 0 ? `$${openaiSpendUsd.toFixed(2)} 이번 달` : '미사용',
         status: metrics.length > 0 ? worstStatus(metrics) : 'stable',
+        connectionStatus: openaiConnStatus,
         metrics,
         logoEmoji: '🧠',
         upgrade: {

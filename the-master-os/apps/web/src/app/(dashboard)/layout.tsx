@@ -13,7 +13,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <Sidebar />
 
       {/* 메인 콘텐츠 영역 */}
-      <div className="ml-64 flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col md:ml-[264px]">
         <Header />
         <main className="flex-1 p-6">{children}</main>
       </div>

@@ -1,7 +1,7 @@
-import { type ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import type { LucideIcon } from "lucide-react";
+import { type ReactNode } from 'react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import type { LucideIcon } from 'lucide-react';
 
 interface EmptyStateProps {
   icon: LucideIcon;
@@ -26,15 +26,13 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center py-16 text-center",
+        'flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 py-16 text-center',
         className,
       )}
     >
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
-        <Icon className="h-8 w-8 text-gray-400" />
-      </div>
-      <h3 className="mt-4 text-lg font-semibold text-gray-900">{title}</h3>
-      <p className="mt-2 max-w-sm text-sm text-gray-500">{description}</p>
+      <Icon className="h-12 w-12 text-gray-300" />
+      <h3 className="mt-4 text-sm font-medium text-gray-600">{title}</h3>
+      <p className="mt-1 max-w-sm text-sm text-gray-400">{description}</p>
       {action ? (
         <Button className="mt-6" onClick={action.onClick}>
           {action.label}

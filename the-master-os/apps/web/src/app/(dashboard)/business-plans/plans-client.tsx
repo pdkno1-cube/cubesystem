@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { EmptyState } from '@/components/ui/empty-state';
 import type { BusinessPlanSummary } from './page';
 import { CreatePlanWizard } from '@/components/business-plans/CreatePlanWizard';
 
@@ -121,29 +122,6 @@ function PlanCard({
   );
 }
 
-// ── Empty State ────────────────────────────────────────────────────────────
-
-function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 py-16">
-      <BookOpen className="h-12 w-12 text-gray-300" />
-      <h3 className="mt-4 text-base font-semibold text-gray-700">
-        아직 사업계획서가 없습니다
-      </h3>
-      <p className="mt-1 text-sm text-gray-500">
-        AI로 10분 만에 전문적인 사업계획서를 생성해보세요
-      </p>
-      <button
-        onClick={onCreateClick}
-        className="mt-6 flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
-      >
-        <Plus className="h-4 w-4" />
-        새 사업계획서 만들기
-      </button>
-    </div>
-  );
-}
-
 // ── Main Client Component ──────────────────────────────────────────────────
 
 interface PlansClientProps {
@@ -217,7 +195,12 @@ export function PlansClient({ initialPlans, workspaceId }: PlansClientProps) {
 
       {/* Plans Grid or Empty State */}
       {plans.length === 0 ? (
-        <EmptyState onCreateClick={() => { setIsWizardOpen(true); }} />
+        <EmptyState
+          icon={BookOpen}
+          title="사업계획서가 없습니다"
+          description="AI로 10분 만에 전문적인 사업계획서를 생성해보세요."
+          action={{ label: '새 계획서 작성', onClick: () => { setIsWizardOpen(true); } }}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (

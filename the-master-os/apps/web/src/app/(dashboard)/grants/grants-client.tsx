@@ -14,6 +14,8 @@ import {
   Trophy,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorRetry } from '@/components/ui/error-retry';
 import type { TenderSubmission } from './page';
 
 // ---------------------------------------------------------------------------
@@ -153,6 +155,7 @@ export function GrantsClient({ initialTenders, workspaceId }: GrantsClientProps)
   const [isCrawling, setIsCrawling] = useState(false);
   const [isRunningPipeline, setIsRunningPipeline] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   // Filtered tenders
   const filteredTenders = useMemo(() => {
@@ -172,12 +175,34 @@ export function GrantsClient({ initialTenders, workspaceId }: GrantsClientProps)
     return result;
   }, [tenders, activeTab, searchQuery]);
 
+  // -- Fetch tenders (used for retry) --
+  const fetchTenders = useCallback(async () => {
+    if (!workspaceId) {
+      return;
+    }
+    setError(null);
+    try {
+      const resp = await fetch(
+        `/api/grants?workspace_id=${encodeURIComponent(workspaceId)}`,
+      );
+      if (!resp.ok) {
+        throw new Error('입찰 공고를 불러오는 데 실패했습니다.');
+      }
+      const body = await resp.json() as { data: TenderSubmission[] };
+      setTenders(body.data);
+    } catch (err) {
+      Sentry.captureException(err, { tags: { context: 'grants.fetchTenders' } });
+      setError('입찰 공고를 불러오는 중 오류가 발생했습니다.');
+    }
+  }, [workspaceId]);
+
   // -- Crawl trigger --
   const handleCrawl = useCallback(async () => {
     if (!workspaceId) {
       return;
     }
     setIsCrawling(true);
+    setError(null);
     try {
       const resp = await fetch('/api/grants', {
         method: 'POST',
@@ -211,8 +236,9 @@ export function GrantsClient({ initialTenders, workspaceId }: GrantsClientProps)
         const refetchBody = await refetch.json() as { data: TenderSubmission[] };
         setTenders(refetchBody.data);
       }
-    } catch (error) {
-      Sentry.captureException(error, { tags: { context: 'grants.crawl' } });
+    } catch (err) {
+      Sentry.captureException(err, { tags: { context: 'grants.crawl' } });
+      setError('공고 수집 중 오류가 발생했습니다.');
     } finally {
       setIsCrawling(false);
     }
@@ -257,8 +283,8 @@ export function GrantsClient({ initialTenders, workspaceId }: GrantsClientProps)
             return t;
           }),
         );
-      } catch (error) {
-        Sentry.captureException(error, {
+      } catch (pipelineError) {
+        Sentry.captureException(pipelineError, {
           tags: { context: 'grants.runPipeline' },
         });
       } finally {
@@ -291,14 +317,18 @@ export function GrantsClient({ initialTenders, workspaceId }: GrantsClientProps)
             return t;
           }),
         );
-      } catch (error) {
-        Sentry.captureException(error, {
+      } catch (statusError) {
+        Sentry.captureException(statusError, {
           tags: { context: 'grants.statusUpdate' },
         });
       }
     },
     [],
   );
+
+  if (error) {
+    return <ErrorRetry message={error} onRetry={() => { void fetchTenders(); }} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -370,17 +400,19 @@ export function GrantsClient({ initialTenders, workspaceId }: GrantsClientProps)
 
       {/* Tenders table */}
       {filteredTenders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 py-16">
-          <FileText className="h-12 w-12 text-gray-300" />
-          <p className="mt-4 text-sm font-medium text-gray-500">
-            {tenders.length === 0
-              ? '수집된 공고가 없습니다. "공고 수집" 버튼을 클릭하세요.'
-              : '해당 조건에 맞는 공고가 없습니다.'}
-          </p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="아직 조달 입찰 공고가 없습니다"
+          description={
+            tenders.length === 0
+              ? '공고 수집 버튼을 클릭하여 나라장터 공고를 크롤링하세요.'
+              : '해당 조건에 맞는 공고가 없습니다.'
+          }
+          action={tenders.length === 0 ? { label: '크롤링 시작', onClick: () => { void handleCrawl(); } } : undefined}
+        />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-[700px] w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">

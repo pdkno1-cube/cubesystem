@@ -15,6 +15,7 @@ import {
   Archive,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { EmptyState } from '@/components/ui/empty-state';
 import { StatCard } from '../dashboard/stat-card';
 import { UploadDialog } from './upload-dialog';
 import { DocumentDetailPanel } from './document-detail-panel';
@@ -229,8 +230,20 @@ export function DocumentsClient({
       </div>
 
       {/* Document table */}
+      {filteredReviews.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="검증된 문서가 없습니다"
+          description={
+            searchQuery || statusFilter !== 'all'
+              ? '조건에 맞는 문서가 없습니다.'
+              : '문서를 업로드하여 자동 검증을 시작하세요.'
+          }
+          action={!searchQuery && statusFilter === 'all' ? { label: '문서 업로드', onClick: () => { setIsUploadOpen(true); } } : undefined}
+        />
+      ) : (
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
+        <table className="min-w-[700px] w-full text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50">
             <tr>
               <th className="px-4 py-3 font-medium text-gray-600">파일명</th>
@@ -242,18 +255,7 @@ export function DocumentsClient({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredReviews.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
-                  <FileText className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2">
-                    {searchQuery || statusFilter !== 'all'
-                      ? '조건에 맞는 문서가 없습니다.'
-                      : '아직 검증된 문서가 없습니다.'}
-                  </p>
-                </td>
-              </tr>
-            ) : (
+            {
               filteredReviews.map((review) => {
                 const badge = STATUS_BADGE[review.status] ?? DEFAULT_STATUS_BADGE;
                 const BadgeIcon = badge.icon;
@@ -316,10 +318,11 @@ export function DocumentsClient({
                   </tr>
                 );
               })
-            )}
+            }
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Upload Dialog */}
       <UploadDialog

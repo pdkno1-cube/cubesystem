@@ -2,9 +2,15 @@
 
 import { useState } from 'react';
 import { ExternalLink, ChevronDown, ChevronUp, ArrowUpCircle } from 'lucide-react';
-import { STATUS_CONFIG, type ServiceData } from './infra-service-config';
+import { STATUS_CONFIG, type ConnectionStatus, type ServiceData } from './infra-service-config';
 import { StatusBadge } from './StatusBadge';
 import { UsageMeter } from './UsageMeter';
+
+const CONNECTION_LABELS: Record<ConnectionStatus, { label: string; cls: string }> = {
+  connected:      { label: '연결됨',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  not_configured: { label: '미설정',  cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+  error:          { label: '오류',    cls: 'bg-red-50 text-red-600 border-red-200' },
+};
 
 interface ServiceCardProps {
   service: ServiceData;
@@ -28,6 +34,14 @@ export function ServiceCard({ service }: ServiceCardProps) {
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-900">{service.name}</h3>
               <StatusBadge status={service.status} size="sm" />
+              {(() => {
+                const conn = CONNECTION_LABELS[service.connectionStatus];
+                return (
+                  <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${conn.cls}`}>
+                    {conn.label}
+                  </span>
+                );
+              })()}
             </div>
             <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">{service.description}</p>
             <p className="mt-1 text-xs text-gray-400">

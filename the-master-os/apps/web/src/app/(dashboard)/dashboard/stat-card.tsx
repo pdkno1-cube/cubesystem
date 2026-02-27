@@ -34,7 +34,11 @@ export function StatCard({
   const colorConfig = COLOR_MAP[color] ?? { iconBg: 'bg-brand-50', iconText: 'text-brand-600' };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+    <div
+      role="status"
+      aria-label={`${label}: ${value}${suffix ? ` ${suffix}` : ''}`}
+      className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+    >
       <div className="flex items-center justify-between">
         <div
           className={cn(

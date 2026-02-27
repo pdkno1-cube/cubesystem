@@ -993,6 +993,431 @@ export interface Database {
           },
         ];
       };
+      healing_incidents: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          pipeline_execution_id: string | null;
+          incident_type:
+            | 'api_failure'
+            | 'crawl_blocked'
+            | 'rate_limited'
+            | 'timeout'
+            | 'auth_expired';
+          source_service: string;
+          severity: 'low' | 'medium' | 'high' | 'critical';
+          status:
+            | 'detected'
+            | 'diagnosing'
+            | 'healing'
+            | 'resolved'
+            | 'escalated';
+          resolution_action: string | null;
+          resolution_details: Record<string, unknown>;
+          detected_at: string;
+          resolved_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          pipeline_execution_id?: string | null;
+          incident_type:
+            | 'api_failure'
+            | 'crawl_blocked'
+            | 'rate_limited'
+            | 'timeout'
+            | 'auth_expired';
+          source_service: string;
+          severity?: 'low' | 'medium' | 'high' | 'critical';
+          status?:
+            | 'detected'
+            | 'diagnosing'
+            | 'healing'
+            | 'resolved'
+            | 'escalated';
+          resolution_action?: string | null;
+          resolution_details?: Record<string, unknown>;
+          detected_at?: string;
+          resolved_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          pipeline_execution_id?: string | null;
+          incident_type?:
+            | 'api_failure'
+            | 'crawl_blocked'
+            | 'rate_limited'
+            | 'timeout'
+            | 'auth_expired';
+          source_service?: string;
+          severity?: 'low' | 'medium' | 'high' | 'critical';
+          status?:
+            | 'detected'
+            | 'diagnosing'
+            | 'healing'
+            | 'resolved'
+            | 'escalated';
+          resolution_action?: string | null;
+          resolution_details?: Record<string, unknown>;
+          detected_at?: string;
+          resolved_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'healing_incidents_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'healing_incidents_pipeline_execution_id_fkey';
+            columns: ['pipeline_execution_id'];
+            isOneToOne: false;
+            referencedRelation: 'pipeline_executions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      subscription_plans: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          credits_per_month: number;
+          price_usd: number;
+          features: Json;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          credits_per_month?: number;
+          price_usd?: number;
+          features?: Json;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          credits_per_month?: number;
+          price_usd?: number;
+          features?: Json;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      workspace_subscriptions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          plan_id: string;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          status: 'active' | 'cancelled' | 'past_due' | 'trialing';
+          current_period_start: string | null;
+          current_period_end: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          plan_id: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          status?: 'active' | 'cancelled' | 'past_due' | 'trialing';
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          plan_id?: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          status?: 'active' | 'cancelled' | 'past_due' | 'trialing';
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'workspace_subscriptions_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: true;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'workspace_subscriptions_plan_id_fkey';
+            columns: ['plan_id'];
+            isOneToOne: false;
+            referencedRelation: 'subscription_plans';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      budget_alerts: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          threshold_percent: number;
+          alert_type: 'email' | 'slack' | 'both';
+          is_enabled: boolean;
+          last_triggered_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          threshold_percent?: number;
+          alert_type?: 'email' | 'slack' | 'both';
+          is_enabled?: boolean;
+          last_triggered_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          threshold_percent?: number;
+          alert_type?: 'email' | 'slack' | 'both';
+          is_enabled?: boolean;
+          last_triggered_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'budget_alerts_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: true;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      persona_debates: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          pipeline_execution_id: string | null;
+          topic: string;
+          status: 'active' | 'concluded';
+          summary: string | null;
+          conclusion: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          pipeline_execution_id?: string | null;
+          topic: string;
+          status?: 'active' | 'concluded';
+          summary?: string | null;
+          conclusion?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          pipeline_execution_id?: string | null;
+          topic?: string;
+          status?: 'active' | 'concluded';
+          summary?: string | null;
+          conclusion?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'persona_debates_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'persona_debates_pipeline_execution_id_fkey';
+            columns: ['pipeline_execution_id'];
+            isOneToOne: false;
+            referencedRelation: 'pipeline_executions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      debate_messages: {
+        Row: {
+          id: string;
+          debate_id: string;
+          agent_id: string;
+          agent_role: 'optimist' | 'pessimist' | 'realist' | 'critic';
+          message_content: string;
+          reasoning: string | null;
+          confidence_score: number;
+          sequence_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          debate_id: string;
+          agent_id: string;
+          agent_role: 'optimist' | 'pessimist' | 'realist' | 'critic';
+          message_content: string;
+          reasoning?: string | null;
+          confidence_score?: number;
+          sequence_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          debate_id?: string;
+          agent_id?: string;
+          agent_role?: 'optimist' | 'pessimist' | 'realist' | 'critic';
+          message_content?: string;
+          reasoning?: string | null;
+          confidence_score?: number;
+          sequence_order?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'debate_messages_debate_id_fkey';
+            columns: ['debate_id'];
+            isOneToOne: false;
+            referencedRelation: 'persona_debates';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'debate_messages_agent_id_fkey';
+            columns: ['agent_id'];
+            isOneToOne: false;
+            referencedRelation: 'agents';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      agent_metrics: {
+        Row: {
+          id: string;
+          agent_id: string;
+          workspace_id: string;
+          metric_type:
+            | 'success_rate'
+            | 'avg_response_time'
+            | 'cost_efficiency'
+            | 'quality_score';
+          metric_value: number;
+          period_start: string;
+          period_end: string;
+          sample_count: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          workspace_id: string;
+          metric_type:
+            | 'success_rate'
+            | 'avg_response_time'
+            | 'cost_efficiency'
+            | 'quality_score';
+          metric_value?: number;
+          period_start: string;
+          period_end: string;
+          sample_count?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          workspace_id?: string;
+          metric_type?:
+            | 'success_rate'
+            | 'avg_response_time'
+            | 'cost_efficiency'
+            | 'quality_score';
+          metric_value?: number;
+          period_start?: string;
+          period_end?: string;
+          sample_count?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'agent_metrics_agent_id_fkey';
+            columns: ['agent_id'];
+            isOneToOne: false;
+            referencedRelation: 'agents';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'agent_metrics_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      credit_limits: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          monthly_limit: number;
+          auto_stop: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          monthly_limit?: number;
+          auto_stop?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          monthly_limit?: number;
+          auto_stop?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'credit_limits_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: true;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'credit_limits_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       audit_logs: {
         Row: {
           id: string;
