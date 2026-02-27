@@ -191,6 +191,9 @@ class PipelineGraphBuilder:
             kwargs["mcp_registry"] = deps.mcp_registry
             kwargs["required_mcps"] = deps.required_mcps
 
+        elif node_type == "newsletter_send":
+            kwargs["mcp_registry"] = deps.mcp_registry
+
         # Capture everything in a closure
         captured_config = dict(node_config)
         captured_kwargs = dict(kwargs)
