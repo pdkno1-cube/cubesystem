@@ -28,6 +28,7 @@ from app.middleware.rate_limiter import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.pipeline import PipelineEngine
 from app.routers import agents, health, marketing, pipelines
+from app.services.scheduler import ContentScheduler
 from app.ws import ConnectionManager, ws_router
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         logger.info("Sentry initialised (env=%s)", settings.sentry_environment)
 
+    # Initialise ContentScheduler (content publishing background job)
+    scheduler: ContentScheduler | None = None
+    try:
+        from supabase._async.client import create_client as create_async_client_for_sched
+
+        _sched_supabase = await create_async_client_for_sched(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+        scheduler = ContentScheduler(
+            supabase=_sched_supabase,
+            mcp_registry=app.state._mcp_registry,
+            settings=settings,
+        )
+        await scheduler.start()
+        app.state.scheduler = scheduler
+    except Exception:
+        logger.warning(
+            "ContentScheduler failed to start — scheduled publishing disabled",
+            exc_info=True,
+        )
+
     # Initialise PipelineEngine with async Supabase client
     try:
         from supabase._async.client import create_client as create_async_client
@@ -96,6 +119,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # --- Shutdown ---
     logger.info("Shutting down The Master OS API")
+    if scheduler is not None:
+        await scheduler.stop()
 
 
 def create_app() -> FastAPI:

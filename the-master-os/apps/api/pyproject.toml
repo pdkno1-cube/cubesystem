@@ -41,6 +41,9 @@ dependencies = [
 
     # Pipeline Orchestration
     "langgraph>=0.2.0",
+
+    # Task Scheduling
+    "apscheduler>=3.10",
 ]
 
 [project.optional-dependencies]
