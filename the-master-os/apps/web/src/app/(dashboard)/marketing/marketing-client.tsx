@@ -95,7 +95,7 @@ function SelectedDayPanel({
     );
   }
 
-  const [y, m, d] = date.split('-').map(Number);
+  const [y = 0, m = 0, d = 0] = date.split('-').map(Number);
   const label = new Date(y, m - 1, d).toLocaleDateString('ko-KR', {
     month: 'long',
     day: 'numeric',
@@ -217,7 +217,7 @@ export function MarketingClient({
       if (!item) return;
 
       const orig = new Date(item.scheduled_at);
-      const [y, m, d] = newDate.split('-').map(Number);
+      const [y = 0, m = 0, d = 0] = newDate.split('-').map(Number);
       const updated = new Date(y, m - 1, d, orig.getHours(), orig.getMinutes());
 
       try {

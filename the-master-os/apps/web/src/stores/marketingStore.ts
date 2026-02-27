@@ -138,7 +138,7 @@ export const useMarketingStore = create<MarketingState>()((set) => ({
         if (s.id !== id) return s;
         // Keep the original time, only change the date part
         const orig = new Date(s.scheduled_at);
-        const [y, m, d] = newDate.split('-').map(Number);
+        const [y = 0, m = 0, d = 0] = newDate.split('-').map(Number);
         const updated = new Date(
           y,
           m - 1,

@@ -9,6 +9,7 @@ import {
   Clock,
   Building2,
 } from 'lucide-react';
+import { McpProviderSection } from '@/components/mcp/McpProviderSection';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -566,6 +567,21 @@ export default function VaultPage() {
               onDelete={handleDeleteRequest}
             />
           ))}
+        </div>
+      ) : null}
+
+      {/* MCP Provider Integration Section */}
+      {!isLoading && workspaces.length > 0 ? (
+        <div className="border-t pt-6">
+          <McpProviderSection
+            workspaceId={workspaces[0]?.id ?? ''}
+            vaultSecrets={secrets.map((s) => ({
+              id: s.id,
+              name: s.name,
+              slug: s.slug,
+              category: s.category,
+            }))}
+          />
         </div>
       ) : null}
 

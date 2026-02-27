@@ -134,7 +134,7 @@ describe('moveSchedule', () => {
 
     useMarketingStore.getState().moveSchedule('s1', '2026-03-22');
 
-    const updated = useMarketingStore.getState().schedules[0];
+    const updated = useMarketingStore.getState().schedules[0]!;
     const orig = new Date(originalAt);
     const date = new Date(updated.scheduled_at);
     // Date should be March 22 in local time
@@ -170,7 +170,7 @@ describe('removeSchedule', () => {
 
     const { schedules } = useMarketingStore.getState();
     expect(schedules).toHaveLength(1);
-    expect(schedules[0].id).toBe('s2');
+    expect(schedules[0]!.id).toBe('s2');
   });
 
   it('closes slider when removed schedule was selected', () => {
@@ -215,7 +215,7 @@ describe('updateScheduleStatus', () => {
 
     useMarketingStore.getState().updateScheduleStatus('s1', 'completed');
 
-    const updated = useMarketingStore.getState().schedules[0];
+    const updated = useMarketingStore.getState().schedules[0]!;
     expect(updated.status).toBe('completed');
   });
 

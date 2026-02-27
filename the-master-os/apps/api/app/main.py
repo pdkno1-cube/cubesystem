@@ -27,7 +27,7 @@ from app.middleware.audit_logger import AuditLogMiddleware
 from app.middleware.rate_limiter import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.pipeline import PipelineEngine
-from app.routers import agents, health, marketing, pipelines
+from app.routers import agents, health, marketing, mcp_hub, pipelines
 from app.services.scheduler import ContentScheduler
 from app.ws import ConnectionManager, ws_router
 
@@ -211,6 +211,7 @@ def create_app() -> FastAPI:
     app.include_router(pipelines.router)
     app.include_router(agents.router)
     app.include_router(marketing.router)
+    app.include_router(mcp_hub.router)
     app.include_router(ws_router)
 
     return app

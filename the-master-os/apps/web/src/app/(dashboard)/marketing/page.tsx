@@ -27,7 +27,7 @@ export default async function MarketingPage() {
         .limit(1);
 
       if (workspacesData && workspacesData.length > 0) {
-        workspaceId = workspacesData[0].id as string;
+        workspaceId = workspacesData[0]?.id ?? '';
       }
 
       // 2. Fetch this month's schedules
