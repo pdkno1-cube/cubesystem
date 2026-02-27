@@ -110,14 +110,14 @@ export function useExecutionWS(): UseExecutionWSReturn {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) { return; }
         retryCountRef.current = 0;
         setConnectionStatus('connected');
         setError(null);
       };
 
       ws.onmessage = (event: MessageEvent) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) { return; }
 
         let data: StepUpdate;
         try {
@@ -180,7 +180,7 @@ export function useExecutionWS(): UseExecutionWSReturn {
       };
 
       ws.onclose = (event: CloseEvent) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) { return; }
 
         // Policy violation = auth failure, do not retry
         if (event.code === 1008) {
@@ -215,7 +215,7 @@ export function useExecutionWS(): UseExecutionWSReturn {
       };
 
       ws.onerror = () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) { return; }
         // onclose will fire after onerror, reconnect logic lives there
       };
     },

@@ -74,7 +74,7 @@ export function StartDialog({
       e.preventDefault();
       setFormError(null);
 
-      if (!pipeline) return;
+      if (!pipeline) { return; }
 
       if (!workspaceId) {
         setFormError('워크스페이스를 선택하세요.');
@@ -102,7 +102,7 @@ export function StartDialog({
     [pipeline, workspaceId, inputData, onExecute, resetForm],
   );
 
-  if (!pipeline) return null;
+  if (!pipeline) { return null; }
 
   const placeholder = INPUT_PLACEHOLDERS[pipeline.category] ?? DEFAULT_PLACEHOLDER;
 
