@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { apiError, handleApiError, type ApiErrorBody } from '@/lib/api-response';
 
@@ -36,7 +37,42 @@ interface CreatePlanBody {
   competitors?: Record<string, unknown>[];
 }
 
-// ── Mock sections generator ────────────────────────────────────────────────
+interface FastApiSections {
+  executive_summary: string;
+  problem: string;
+  solution: string;
+  market_analysis: {
+    tam: number;
+    sam: number;
+    som: number;
+    description: string;
+  };
+  competitors: string;
+  business_model: string;
+  financial_projection: {
+    years: string[];
+    revenue: number[];
+    cost: number[];
+    profit: number[];
+  };
+  team: string;
+  timeline: {
+    milestones: Array<{ quarter: string; label: string }>;
+  };
+}
+
+interface FastApiGenerateResponse {
+  data: {
+    sections: FastApiSections;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    cost: number;
+  };
+  meta: Record<string, unknown>;
+}
+
+// ── Mock sections generator (fallback) ────────────────────────────────────
 
 function generateMockSections(body: CreatePlanBody): Record<string, unknown> {
   return {
@@ -79,6 +115,50 @@ function formatKRW(value: number): string {
     return `${(value / 10_000).toFixed(0)}만원`;
   }
   return `${value}원`;
+}
+
+// ── FastAPI LLM 호출 ──────────────────────────────────────────────────────
+
+async function generateSectionsViaLLM(
+  body: CreatePlanBody,
+  userToken: string,
+  fastapiUrl: string,
+): Promise<{ sections: Record<string, unknown>; source: string }> {
+  const resp = await fetch(
+    `${fastapiUrl}/orchestrate/business-plans/generate`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${userToken}`,
+      },
+      body: JSON.stringify({
+        company_name: body.company_name,
+        industry: body.industry,
+        target_market: body.target_market,
+        company_description: body.company_description ?? '',
+        tam_value: body.tam_value ?? 0,
+        sam_value: body.sam_value ?? 0,
+        som_value: body.som_value ?? 0,
+        competitors: (body.competitors ?? []).map((c) => ({
+          name: String(c['name'] ?? ''),
+          strength: String(c['strength'] ?? ''),
+          weakness: String(c['weakness'] ?? ''),
+        })),
+      }),
+    },
+  );
+
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    throw new Error(`FastAPI responded ${String(resp.status)}: ${errorText}`);
+  }
+
+  const result = await resp.json() as FastApiGenerateResponse;
+  const meta = result.meta ?? {};
+  const source = String(meta['source'] ?? 'llm');
+
+  return { sections: result.data.sections as unknown as Record<string, unknown>, source };
 }
 
 // ── GET /api/business-plans ────────────────────────────────────────────────
@@ -140,10 +220,8 @@ export async function POST(
       );
     }
 
-    // Generate sections (mock AI generation)
-    const sections = generateMockSections(body);
-
-    const { data, error } = await supabase
+    // 1) Insert with status 'generating'
+    const { data: insertedRow, error: insertError } = await supabase
       .from('business_plans')
       .insert({
         workspace_id: body.workspace_id,
@@ -156,19 +234,75 @@ export async function POST(
         sam_value: body.sam_value ?? 0,
         som_value: body.som_value ?? 0,
         competitors: body.competitors ?? [],
-        sections,
-        status: 'completed',
-        generated_at: new Date().toISOString(),
+        sections: {},
+        status: 'generating',
       })
       .select()
       .single();
 
-    if (error) {
-      return apiError('DB_ERROR', error.message, 500);
+    if (insertError) {
+      return apiError('DB_ERROR', insertError.message, 500);
     }
 
+    const planId = (insertedRow as unknown as BusinessPlanRow).id;
+
+    // 2) Try FastAPI LLM generation
+    const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
+    let sections: Record<string, unknown>;
+    let finalStatus: string = 'completed';
+    let source: string = 'mock';
+
+    if (FASTAPI_URL) {
+      // Get session token for FastAPI auth
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token ?? '';
+
+      try {
+        const result = await generateSectionsViaLLM(body, accessToken, FASTAPI_URL);
+        sections = result.sections;
+        source = result.source;
+        finalStatus = 'completed';
+      } catch (llmError) {
+        Sentry.captureException(llmError, {
+          tags: { context: 'business-plans.POST.llm' },
+        });
+        // Fallback to mock on LLM failure
+        sections = generateMockSections(body);
+        finalStatus = 'completed';
+        source = 'mock-fallback';
+      }
+    } else {
+      // No FastAPI URL — use mock
+      sections = generateMockSections(body);
+      source = 'mock';
+    }
+
+    // 3) Update with generated sections
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('business_plans')
+      .update({
+        sections,
+        status: finalStatus,
+        generated_at: new Date().toISOString(),
+      })
+      .eq('id', planId)
+      .select()
+      .single();
+
+    if (updateError) {
+      // Update failed — mark as draft so user can retry
+      await supabase
+        .from('business_plans')
+        .update({ status: 'draft' })
+        .eq('id', planId);
+
+      return apiError('DB_ERROR', updateError.message, 500);
+    }
+
+    const responseRow = updatedRow as unknown as BusinessPlanRow;
+
     return NextResponse.json(
-      { data: data as unknown as BusinessPlanRow },
+      { data: responseRow, meta: { source } },
       { status: 201 },
     );
   } catch (error) {

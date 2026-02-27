@@ -220,11 +220,20 @@ export function MarketingClient({
       const updated = new Date(y, m - 1, d, orig.getHours(), orig.getMinutes());
 
       try {
-        await fetch(`/api/marketing/schedules/${scheduleId}`, {
+        const resp = await fetch(`/api/marketing/schedules/${scheduleId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scheduled_at: updated.toISOString() }),
         });
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          Sentry.captureMessage(`Schedule drop PATCH failed: ${resp.status} ${errBody}`, {
+            level: 'error',
+            tags: { context: 'marketing.schedule.drop' },
+            extra: { scheduleId, newDate, status: resp.status },
+          });
+          void fetchSchedules(viewYear, viewMonth);
+        }
       } catch (error) {
         Sentry.captureException(error, { tags: { context: 'marketing.schedule.drop' } });
         // Revert on failure (best-effort)

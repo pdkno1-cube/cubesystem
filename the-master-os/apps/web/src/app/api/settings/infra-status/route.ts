@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import {
   worstStatus,
@@ -16,18 +17,74 @@ function envNum(key: string, fallback: number): number {
   return isNaN(n) ? fallback : n;
 }
 
+// ─── Supabase Management API 실데이터 조회 ──────────────────────
+interface SupabaseLiveMetrics {
+  dbSizeMB: number;
+  /** null = API 호출 실패 (fallback 사용) */
+  fetched: boolean;
+}
+
+async function fetchSupabaseMetrics(): Promise<SupabaseLiveMetrics> {
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  const projectRef = process.env.SUPABASE_PROJECT_REF ?? process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF;
+
+  if (!accessToken || !projectRef) {
+    return { dbSizeMB: 0, fetched: false };
+  }
+
+  try {
+    const resp = await fetch(
+      `https://api.supabase.com/v1/projects/${projectRef}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        next: { revalidate: 300 }, // 5분 캐시
+      },
+    );
+
+    if (!resp.ok) {
+      Sentry.captureException(
+        new Error(`Supabase Management API ${resp.status}: ${resp.statusText}`),
+        { tags: { context: 'infra-status.supabase-api' } },
+      );
+      return { dbSizeMB: 0, fetched: false };
+    }
+
+    const project = (await resp.json()) as {
+      database?: { size?: number };
+      disk_usage?: number;
+    };
+
+    // disk_usage는 bytes 단위로 반환됨 — MB로 변환
+    const diskBytes = project.disk_usage ?? project.database?.size ?? 0;
+    const dbSizeMB = Math.round((diskBytes / (1024 * 1024)) * 10) / 10;
+
+    return { dbSizeMB, fetched: true };
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'infra-status.supabase-api' } });
+    return { dbSizeMB: 0, fetched: false };
+  }
+}
+
 export async function GET() {
   // 인증 확인
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });}
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // ─── Supabase 실데이터 조회 (비동기) ──────────────────────────
+  const supabaseLive = await fetchSupabaseMetrics();
 
   // ─── 사용량 값 (env var 주입 or 기본 mock) ─────────────────────
   const vercelBandwidthGB    = envNum('VERCEL_BANDWIDTH_GB', 12.4);
   const vercelFnInvocations  = envNum('VERCEL_FN_INVOCATIONS', 8200);
   const railwayUsageUsd      = envNum('RAILWAY_CURRENT_USAGE_USD', 2.80);
   const railwayMemoryMB      = envNum('RAILWAY_MEMORY_MB', 380);
-  const supabaseDbMB         = envNum('SUPABASE_DB_MB', 47);
+  // Supabase: 실데이터 > env var > 기본값 순서
+  const supabaseDbMB         = supabaseLive.fetched
+    ? supabaseLive.dbSizeMB
+    : envNum('SUPABASE_DB_MB', 47);
   const supabaseMau          = envNum('SUPABASE_MAU', 3);
   const supabaseBandwidthGB  = envNum('SUPABASE_BANDWIDTH_GB', 0.8);
   const anthropicSpendUsd    = envNum('ANTHROPIC_MONTHLY_SPEND_USD', 3.20);
@@ -103,15 +160,17 @@ export async function GET() {
 
     // 3. Supabase
     (() => {
+      const dbLabel = supabaseLive.fetched ? 'DB 용량 (실시간)' : 'DB 용량';
       const metrics = [
-        metric('DB 용량', supabaseDbMB, 500, 'MB'),
+        metric(dbLabel, supabaseDbMB, 500, 'MB'),
         metric('월간 활성 유저', supabaseMau, 50_000, 'MAU'),
         metric('대역폭', supabaseBandwidthGB, 5, 'GB'),
       ];
+      const descSuffix = supabaseLive.fetched ? ' — DB 실시간 조회' : '';
       return {
         id: 'supabase',
         name: 'Supabase',
-        description: 'PostgreSQL DB + 인증 + 스토리지 (BaaS)',
+        description: `PostgreSQL DB + 인증 + 스토리지 (BaaS)${descSuffix}`,
         category: 'database' as const,
         currentPlan: 'Free',
         monthlyCostUsd: 0,

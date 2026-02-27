@@ -27,8 +27,8 @@ from app.middleware.audit_logger import AuditLogMiddleware
 from app.middleware.rate_limiter import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.pipeline import PipelineEngine
-from app.routers import agents, auto_healing, document_validation, grant_factory, health, marketing, mcp_hub, pipelines
-from app.scheduler import init_vault_scheduler, shutdown_vault_scheduler
+from app.routers import agents, auto_healing, business_plans, debates, document_validation, grant_factory, health, marketing, mcp_hub, pipelines
+from app.scheduler import init_health_monitor, init_vault_scheduler, shutdown_health_monitor, shutdown_vault_scheduler
 from app.services.scheduler import ContentScheduler
 from app.ws import ConnectionManager, ws_router
 
@@ -109,6 +109,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             exc_info=True,
         )
 
+    # Initialise Health Monitor scheduler (ENABLE_SCHEDULER=true to activate)
+    health_monitor = None
+    try:
+        from supabase._async.client import (
+            create_client as create_async_client_for_health,
+        )
+
+        _health_supabase = await create_async_client_for_health(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+        health_monitor = await init_health_monitor(
+            supabase=_health_supabase,
+            supabase_url=settings.supabase_url,
+            supabase_key=settings.supabase_service_role_key,
+        )
+        app.state.health_monitor = health_monitor
+    except Exception:
+        logger.warning(
+            "Health monitor scheduler failed to start — auto-detection disabled",
+            exc_info=True,
+        )
+
     # Initialise PipelineEngine with async Supabase client
     try:
         from supabase._async.client import create_client as create_async_client
@@ -142,6 +165,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if scheduler is not None:
         await scheduler.stop()
     await shutdown_vault_scheduler()
+    await shutdown_health_monitor()
 
 
 def create_app() -> FastAPI:
@@ -236,6 +260,8 @@ def create_app() -> FastAPI:
     app.include_router(auto_healing.router)
     app.include_router(document_validation.router)
     app.include_router(grant_factory.router)
+    app.include_router(business_plans.router)
+    app.include_router(debates.router)
     app.include_router(ws_router)
 
     return app

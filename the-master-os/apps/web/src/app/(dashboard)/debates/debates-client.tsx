@@ -173,11 +173,27 @@ export function DebatesClient({
     setSelectedDebate(null);
   }, []);
 
+  const handleDebateUpdate = useCallback((updated: DebateDetail) => {
+    setSelectedDebate(updated);
+    // Also update message count in the list
+    setDebates((prev) =>
+      prev.map((d) =>
+        d.id === updated.id
+          ? { ...d, message_count: updated.messages.length }
+          : d
+      )
+    );
+  }, []);
+
   // Show detail view
   if (selectedDebate) {
     return (
       <div className="animate-fade-in">
-        <DebateTimeline debate={selectedDebate} onBack={handleBack} />
+        <DebateTimeline
+          debate={selectedDebate}
+          onBack={handleBack}
+          onDebateUpdate={handleDebateUpdate}
+        />
       </div>
     );
   }

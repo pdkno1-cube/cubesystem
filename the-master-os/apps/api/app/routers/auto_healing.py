@@ -4,12 +4,14 @@ Endpoints:
   GET    /orchestrate/healing/incidents          List healing incidents
   POST   /orchestrate/healing/trigger            Manually trigger a healing pipeline
   GET    /orchestrate/healing/incidents/{id}     Get incident details
+  PATCH  /orchestrate/healing/incidents/{id}     Resolve or update an incident
   GET    /orchestrate/healing/stats              Healing statistics (totals, auto-resolve rate, avg MTTR)
 
 Design:
   - healing_incidents tracks every detected system failure.
   - Each incident links optionally to a pipeline_execution for traceability.
   - Stats are computed from the incidents table (no separate aggregation table).
+  - On resolution, agent success_rate metrics are recorded via agent_metrics service.
 """
 
 from __future__ import annotations
@@ -87,6 +89,19 @@ class HealingStatsResponse(BaseModel):
     active_incidents: int
     by_severity: dict[str, int]
     by_type: dict[str, int]
+
+
+class IncidentResolveRequest(BaseModel):
+    """Request body for PATCH /orchestrate/healing/incidents/{id}."""
+
+    status: Literal["resolved", "escalated"] = "resolved"
+    resolution_action: str | None = Field(
+        default=None, max_length=200, description="e.g. api_key_rotated, proxy_switched"
+    )
+    resolution_details: dict[str, object] = Field(default_factory=dict)
+    agent_id: str | None = Field(
+        default=None, description="Agent UUID — records success_rate metric on resolution"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +252,125 @@ async def get_incident(
         )
 
     return BaseResponse(data=_row_to_incident(result.data[0]))
+
+
+# ---------------------------------------------------------------------------
+# PATCH /orchestrate/healing/incidents/{incident_id}
+# ---------------------------------------------------------------------------
+
+
+@router.patch(
+    "/incidents/{incident_id}",
+    response_model=BaseResponse[IncidentResponse],
+    summary="Resolve or update a healing incident",
+)
+async def resolve_incident(
+    incident_id: str,
+    body: IncidentResolveRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> BaseResponse[IncidentResponse]:
+    """Update incident status to resolved/escalated and record agent metrics.
+
+    When an incident is resolved and an ``agent_id`` is provided, a
+    ``success_rate`` metric is recorded in ``agent_metrics`` for the agent.
+    """
+    sb = _supabase_client(settings)
+
+    # Fetch the existing incident to get workspace_id and validate existence
+    existing = (
+        sb.table("healing_incidents")
+        .select("*")
+        .eq("id", incident_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "NOT_FOUND", "message": f"Incident '{incident_id}' not found."},
+        )
+
+    incident_row = existing.data[0]
+    workspace_id = str(incident_row["workspace_id"])
+
+    now = datetime.now(tz=timezone.utc)
+    update_data: dict[str, object] = {
+        "status": body.status,
+    }
+
+    if body.resolution_action is not None:
+        update_data["resolution_action"] = body.resolution_action
+
+    if body.resolution_details:
+        # Merge with existing resolution_details
+        existing_details: dict[str, object] = incident_row.get("resolution_details") or {}
+        if isinstance(existing_details, dict):
+            existing_details.update(body.resolution_details)
+        else:
+            existing_details = body.resolution_details
+        existing_details["resolved_by"] = user.user_id
+        update_data["resolution_details"] = existing_details
+
+    if body.status == "resolved":
+        update_data["resolved_at"] = now.isoformat()
+
+    result = (
+        sb.table("healing_incidents")
+        .update(update_data)
+        .eq("id", incident_id)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "DB_ERROR", "message": "Failed to update healing incident."},
+        )
+
+    updated_row = result.data[0]
+
+    # Record agent metric on resolution
+    if body.status == "resolved" and body.agent_id:
+        try:
+            from app.services.agent_metrics import record_agent_metric
+
+            await record_agent_metric(
+                supabase=sb,
+                agent_id=body.agent_id,
+                workspace_id=workspace_id,
+                metric_type="success_rate",
+                value=100.0,  # Successful resolution
+            )
+        except Exception:
+            logger.warning(
+                "Failed to record agent metric for incident=%s agent=%s",
+                incident_id,
+                body.agent_id,
+                exc_info=True,
+            )
+
+    # Audit log
+    try:
+        sb.table("audit_logs").insert({
+            "workspace_id": workspace_id,
+            "user_id": user.user_id,
+            "action": f"healing.{body.status}",
+            "category": "healing",
+            "resource_type": "healing_incident",
+            "resource_id": incident_id,
+            "details": {
+                "status": body.status,
+                "resolution_action": body.resolution_action,
+                "agent_id": body.agent_id,
+            },
+            "severity": "info",
+        }).execute()
+    except Exception:
+        logger.warning("Failed to write healing resolution audit log", exc_info=True)
+
+    return BaseResponse(data=_row_to_incident(updated_row))
 
 
 # ---------------------------------------------------------------------------

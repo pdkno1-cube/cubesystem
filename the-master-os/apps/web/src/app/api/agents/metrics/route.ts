@@ -31,11 +31,12 @@ interface MetricRow {
 
 interface MetricSummary {
   metric_type: string;
-  current_value: number;
+  current_value: number | null;
   previous_value: number | null;
   trend: 'up' | 'down' | 'stable';
   change_percent: number;
   sparkline: number[];
+  collecting: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,12 +79,15 @@ export async function GET(request: NextRequest) {
     const periodStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
     const previousPeriodStart = new Date(periodStart.getTime() - periodDays * 24 * 60 * 60 * 1000);
 
+    const periodStartStr = periodStart.toISOString().split('T')[0] ?? '';
+    const previousPeriodStartStr = previousPeriodStart.toISOString().split('T')[0] ?? '';
+
     // Fetch current period metrics
     const { data: currentMetrics, error } = await db
       .from('agent_metrics')
       .select('*')
       .eq('agent_id', agent_id)
-      .gte('period_start', periodStart.toISOString().split('T')[0])
+      .gte('period_start', periodStartStr)
       .order('period_start', { ascending: true });
 
     if (error) {
@@ -98,8 +102,8 @@ export async function GET(request: NextRequest) {
       .from('agent_metrics')
       .select('*')
       .eq('agent_id', agent_id)
-      .gte('period_start', previousPeriodStart.toISOString().split('T')[0])
-      .lt('period_start', periodStart.toISOString().split('T')[0])
+      .gte('period_start', previousPeriodStartStr)
+      .lt('period_start', periodStartStr)
       .order('period_start', { ascending: true });
 
     const currentRows = (currentMetrics ?? []) as MetricRow[];
@@ -107,27 +111,37 @@ export async function GET(request: NextRequest) {
 
     const metricTypes = ['success_rate', 'avg_response_time', 'cost_efficiency', 'quality_score'];
 
+    // Check if there is any real data at all
+    const hasAnyData = currentRows.length > 0 || prevRows.length > 0;
+
     const summaries: MetricSummary[] = metricTypes.map((type) => {
       const currentOfType = currentRows.filter((m) => m.metric_type === type);
       const prevOfType = prevRows.filter((m) => m.metric_type === type);
 
-      // Current value: average of current period
+      const hasData = currentOfType.length > 0;
+
+      // Current value: average of current period (null if no data)
       const currentValue =
         currentOfType.length > 0
-          ? currentOfType.reduce((sum, m) => sum + m.metric_value, 0) / currentOfType.length
-          : 0;
+          ? Math.round(
+              (currentOfType.reduce((sum, m) => sum + m.metric_value, 0) / currentOfType.length) *
+                100
+            ) / 100
+          : null;
 
       // Previous value: average of previous period
       const previousValue =
         prevOfType.length > 0
-          ? prevOfType.reduce((sum, m) => sum + m.metric_value, 0) / prevOfType.length
+          ? Math.round(
+              (prevOfType.reduce((sum, m) => sum + m.metric_value, 0) / prevOfType.length) * 100
+            ) / 100
           : null;
 
       // Trend
       let trend: 'up' | 'down' | 'stable' = 'stable';
       let changePercent = 0;
 
-      if (previousValue !== null && previousValue !== 0) {
+      if (currentValue !== null && previousValue !== null && previousValue !== 0) {
         changePercent = ((currentValue - previousValue) / previousValue) * 100;
         if (changePercent > 1) {
           trend = 'up';
@@ -136,45 +150,28 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Sparkline: last 7 data points
-      const sparkline = currentOfType.slice(-7).map((m) => m.metric_value);
-
-      // If no data, generate mock sparkline for demo
-      if (sparkline.length === 0) {
-        const baseValues: Record<string, number> = {
-          success_rate: 85,
-          avg_response_time: 1200,
-          cost_efficiency: 72,
-          quality_score: 88,
-        };
-        const base = baseValues[type] ?? 50;
-        for (let i = 0; i < 7; i++) {
-          sparkline.push(base + (Math.random() - 0.5) * base * 0.2);
-        }
-      }
+      // Sparkline: last 7 data points (empty if no data)
+      const sparkline = hasData ? currentOfType.slice(-7).map((m) => m.metric_value) : [];
 
       return {
         metric_type: type,
-        current_value: Math.round(currentValue * 100) / 100 || getMockValue(type),
-        previous_value: previousValue !== null ? Math.round(previousValue * 100) / 100 : null,
+        current_value: currentValue,
+        previous_value: previousValue,
         trend,
         change_percent: Math.round(changePercent * 10) / 10,
         sparkline,
+        collecting: !hasData,
       };
     });
 
-    return NextResponse.json({ data: summaries });
+    return NextResponse.json({
+      data: summaries,
+      meta: {
+        has_data: hasAnyData,
+        message: hasAnyData ? null : '데이터 수집 중입니다. 에이전트 실행 후 지표가 기록됩니다.',
+      },
+    });
   } catch (error) {
     return handleApiError(error, 'agents.metrics.GET');
   }
-}
-
-function getMockValue(type: string): number {
-  const defaults: Record<string, number> = {
-    success_rate: 87.5,
-    avg_response_time: 1150,
-    cost_efficiency: 74.2,
-    quality_score: 89.3,
-  };
-  return defaults[type] ?? 50;
 }

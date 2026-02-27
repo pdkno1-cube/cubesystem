@@ -46,16 +46,16 @@ export async function POST(
       );
     }
 
-    const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
+    const FASTAPI_URL = process.env.FASTAPI_URL ?? process.env.NEXT_PUBLIC_FASTAPI_URL ?? '';
 
     // If FastAPI is not configured, return mock response for development
     if (!FASTAPI_URL) {
       return NextResponse.json({
         data: {
           execution_id: crypto.randomUUID(),
-          status: 'running',
+          status: 'mock',
           message:
-            'Pipeline started (mock mode - FastAPI not connected)',
+            'FastAPI 서버 미연결 — FASTAPI_URL 환경변수를 설정하세요 (예: https://fastapi-backend-production-74c3.up.railway.app)',
         },
       });
     }

@@ -50,6 +50,8 @@ import { useToast } from "@/hooks/use-toast";
 // Types
 // ---------------------------------------------------------------------------
 
+type BillingMode = "live" | "simulated";
+
 interface CreditTransaction {
   id: string;
   workspace_id: string;
@@ -703,12 +705,14 @@ function SubscriptionSection({
   subscription,
   creditLimits,
   workspaceId,
+  billingMode,
   onSubscriptionChanged,
 }: {
   plans: SubscriptionPlan[];
   subscription: WorkspaceSubscription | null;
   creditLimits: CreditLimitInfo[];
   workspaceId: string;
+  billingMode: BillingMode;
   onSubscriptionChanged: () => void;
 }) {
   const [upgradingSlug, setUpgradingSlug] = useState<string | null>(null);
@@ -852,9 +856,15 @@ function SubscriptionSection({
             />
           ))}
         </div>
-        <p className="mt-4 text-center text-xs text-gray-400">
-          Stripe 결제 연동 준비중입니다. 현재는 시뮬레이션 모드로 동작합니다.
-        </p>
+        {billingMode === "simulated" ? (
+          <div className="mt-6 flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+            <p className="text-sm text-amber-700">
+              테스트 모드 &mdash; Stripe 연동 전이므로 실제 결제가 발생하지 않습니다.
+              STRIPE_SECRET_KEY 환경변수 설정 시 라이브 모드로 전환됩니다.
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -972,6 +982,7 @@ export default function BillingPage() {
   const [data, setData] = useState<CreditsData | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
+  const [billingMode, setBillingMode] = useState<BillingMode>("simulated");
   const [budgetAlert, setBudgetAlert] = useState<BudgetAlert | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -1021,18 +1032,20 @@ export default function BillingPage() {
   }, []);
 
   const fetchSubscription = useCallback(
-    async (workspaceId: string) => {
+    async (wsId: string) => {
       try {
         const res = await fetch(
-          `/api/billing/subscription?workspace_id=${encodeURIComponent(workspaceId)}`,
+          `/api/billing/subscription?workspace_id=${encodeURIComponent(wsId)}`,
         );
         if (!res.ok) {
           throw new Error(`구독 조회 실패: ${String(res.status)}`);
         }
         const json = (await res.json()) as {
           subscription: WorkspaceSubscription | null;
+          mode?: BillingMode;
         };
         setSubscription(json.subscription);
+        setBillingMode(json.mode ?? "simulated");
       } catch (err) {
         Sentry.captureException(err, {
           tags: { context: "billing.fetchSubscription" },
@@ -1175,6 +1188,7 @@ export default function BillingPage() {
               subscription={subscription}
               creditLimits={credit_limits}
               workspaceId={primaryWorkspaceId ?? ""}
+              billingMode={billingMode}
               onSubscriptionChanged={handleRefresh}
             />
           </div>

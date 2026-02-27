@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAgentStore } from '@/stores/agent-store';
+import { useToast } from '@/hooks/use-toast';
 
 // ---------------------------------------------------------------------------
 // Swarm template definitions
@@ -218,6 +219,7 @@ export function SwarmTemplateDialog({
   onCreated,
 }: SwarmTemplateDialogProps) {
   const { createAgent } = useAgentStore();
+  const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [phase, setPhase] = useState<CreationPhase>('select');
   const [progress, setProgress] = useState<CreationProgress>({
@@ -293,9 +295,14 @@ export function SwarmTemplateDialog({
   }, [selectedTemplate, createAgent]);
 
   const handleDone = useCallback(() => {
+    toast({
+      title: '스웜 에이전트 생성 완료',
+      description: '파이프라인 페이지에서 생성된 에이전트를 연결하세요.',
+      variant: 'success',
+    });
     resetState();
     onCreated();
-  }, [resetState, onCreated]);
+  }, [resetState, onCreated, toast]);
 
   const currentTemplate = SWARM_TEMPLATES.find(
     (t) => t.id === selectedTemplate

@@ -142,7 +142,27 @@ export async function GET(request: NextRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// POST — Create a new debate
+// Types — FastAPI response
+// ---------------------------------------------------------------------------
+
+interface GeneratedMessage {
+  agent_id: string;
+  agent_role: string;
+  message_content: string;
+  reasoning: string;
+  confidence_score: number;
+}
+
+interface GenerateMessagesApiResponse {
+  data: {
+    messages: GeneratedMessage[];
+    round_number: number;
+    llm_used: boolean;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// POST — Create a new debate (with AI message generation)
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
@@ -172,7 +192,7 @@ export async function POST(request: NextRequest) {
     const { workspace_id, topic, agent_ids } = parsed.data;
     const db = untyped(supabase);
 
-    // Create debate
+    // Create debate row
     const { data: debateRows, error: debateError } = await db
       .from('persona_debates')
       .insert({
@@ -199,19 +219,85 @@ export async function POST(request: NextRequest) {
       'critic',
     ];
 
-    const initialMessages = agent_ids.map((agentId, idx) => ({
-      debate_id: debate.id,
+    // Fetch agent names for FastAPI request
+    const { data: agentsData } = await db
+      .from('agents')
+      .select('id, name')
+      .in('id', agent_ids);
+
+    const agentNameMap: Record<string, string> = {};
+    for (const agent of (agentsData ?? []) as Array<{ id: string; name: string }>) {
+      agentNameMap[agent.id] = agent.name;
+    }
+
+    const agentPayload = agent_ids.map((agentId, idx) => ({
       agent_id: agentId,
-      agent_role: roles[idx % roles.length],
-      message_content: `토론 주제 "${topic}"에 대한 ${roles[idx % roles.length]} 관점으로 참여합니다.`,
-      reasoning: '초기 참여 메시지',
-      confidence_score: 0.5,
-      sequence_order: idx,
+      agent_role: roles[idx % roles.length] as string,
+      agent_name: agentNameMap[agentId] ?? `Agent ${idx + 1}`,
     }));
+
+    // Try FastAPI for AI-generated messages
+    const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
+    let aiMessages: GeneratedMessage[] | null = null;
+
+    if (FASTAPI_URL) {
+      try {
+        const fastapiRes = await fetch(
+          `${FASTAPI_URL}/orchestrate/debates/generate-messages`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              debate_id: debate.id,
+              agents: agentPayload,
+              previous_messages: [],
+              round_number: 1,
+              start_sequence_order: 0,
+            }),
+            signal: AbortSignal.timeout(30_000),
+          }
+        );
+
+        if (fastapiRes.ok) {
+          const fastapiJson = (await fastapiRes.json()) as GenerateMessagesApiResponse;
+          aiMessages = fastapiJson.data.messages;
+        } else {
+          Sentry.captureMessage(
+            `Debate FastAPI returned ${fastapiRes.status}`,
+            'warning'
+          );
+        }
+      } catch (fastapiErr) {
+        Sentry.captureException(fastapiErr, {
+          tags: { context: 'debates.POST.fastapi' },
+        });
+      }
+    }
+
+    // Build messages for DB insertion
+    const dbMessages = agent_ids.map((agentId, idx) => {
+      const role = roles[idx % roles.length] as string;
+      const aiMsg = aiMessages?.find(
+        (m) => m.agent_id === agentId && m.agent_role === role
+      );
+
+      return {
+        debate_id: debate.id,
+        agent_id: agentId,
+        agent_role: role,
+        message_content:
+          aiMsg?.message_content ??
+          `토론 주제 "${topic}"에 대한 ${role} 관점으로 참여합니다.`,
+        reasoning: aiMsg?.reasoning ?? '초기 참여 메시지',
+        confidence_score: aiMsg?.confidence_score ?? 0.5,
+        sequence_order: idx,
+      };
+    });
 
     const { error: msgError } = await db
       .from('debate_messages')
-      .insert(initialMessages);
+      .insert(dbMessages);
 
     if (msgError) {
       Sentry.captureException(msgError, {
@@ -226,7 +312,11 @@ export async function POST(request: NextRequest) {
       category: 'agent',
       resource_type: 'persona_debate',
       resource_id: debate.id,
-      details: { topic, agent_count: agent_ids.length },
+      details: {
+        topic,
+        agent_count: agent_ids.length,
+        ai_generated: aiMessages !== null,
+      },
       severity: 'info',
     });
 

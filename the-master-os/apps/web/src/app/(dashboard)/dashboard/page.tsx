@@ -100,72 +100,14 @@ async function checkFastapiHealth(): Promise<'healthy' | 'unhealthy' | 'unknown'
   }
 }
 
-// Mock data for dev mode (no Supabase)
-function getMockDashboardData(): DashboardData {
+function getEmptyDashboardData(): DashboardData {
   return {
-    workspaces: {
-      total: 2,
-      list: [
-        {
-          id: 'ws-001',
-          name: '엉클로지텍',
-          slug: 'uncle-logitech',
-          description: '물류 자동화',
-          icon_url: null,
-          is_active: true,
-          created_at: '2026-03-01',
-          agent_count: 3,
-          active_agents: 2,
-          pipeline_queued: 0,
-          pipeline_running: 1,
-          pipeline_completed: 5,
-          pipeline_error: 0,
-          credit_balance: 30000,
-        },
-        {
-          id: 'ws-002',
-          name: '디어버블',
-          slug: 'dear-bubble',
-          description: 'F&B 마케팅',
-          icon_url: null,
-          is_active: true,
-          created_at: '2026-03-02',
-          agent_count: 2,
-          active_agents: 1,
-          pipeline_queued: 1,
-          pipeline_running: 0,
-          pipeline_completed: 3,
-          pipeline_error: 1,
-          credit_balance: 20000,
-        },
-      ],
-    },
-    agents: {
-      total: 6,
-      pool: 2,
-      active: 3,
-      paused: 1,
-      category_breakdown: { planning: 2, writing: 1, marketing: 1, audit: 1, ocr: 1 },
-    },
-    pipelines: {
-      running: 1,
-      completed: 5,
-      error: 0,
-      today_executions: 3,
-      recent: [],
-    },
-    credits: {
-      total_balance: 50000,
-      recent_usage: 2350,
-    },
-    content: {
-      published_this_week: 7,
-    },
-    system_health: {
-      fastapi: 'unknown',
-      supabase: 'healthy',
-      mcp: { connected: 0, total: 0 },
-    },
+    workspaces: { total: 0, list: [] },
+    agents: { total: 0, pool: 0, active: 0, paused: 0, category_breakdown: {} },
+    pipelines: { running: 0, completed: 0, error: 0, today_executions: 0, recent: [] },
+    credits: { total_balance: 0, recent_usage: 0 },
+    content: { published_this_week: 0 },
+    system_health: { fastapi: 'unknown', supabase: 'unhealthy', mcp: { connected: 0, total: 0 } },
     audit_logs: [],
   };
 }
@@ -251,7 +193,7 @@ export default async function DashboardPage() {
       supabase
         .from('content_schedules')
         .select('id, status, scheduled_at')
-        .eq('status', 'published')
+        .in('status', ['published', 'completed'])
         .gte('scheduled_at', weekRange.start)
         .lt('scheduled_at', weekRange.end),
 
@@ -389,8 +331,7 @@ export default async function DashboardPage() {
     };
   } catch (error) {
     Sentry.captureException(error, { tags: { context: 'dashboard.page.load' } });
-    // Supabase 미연결 시 mock 데이터 사용
-    dashboardData = getMockDashboardData();
+    dashboardData = getEmptyDashboardData();
   }
 
   return <DashboardClient data={dashboardData} />;
