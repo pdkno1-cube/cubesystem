@@ -56,6 +56,7 @@ export interface Database {
           description: string | null;
           icon_url: string | null;
           owner_id: string;
+          status: 'active' | 'archived' | 'suspended';
           is_active: boolean;
           settings: Record<string, unknown>;
           created_at: string;
@@ -69,6 +70,7 @@ export interface Database {
           description?: string | null;
           icon_url?: string | null;
           owner_id: string;
+          status?: 'active' | 'archived' | 'suspended';
           is_active?: boolean;
           settings?: Record<string, unknown>;
           created_at?: string;
@@ -82,6 +84,7 @@ export interface Database {
           description?: string | null;
           icon_url?: string | null;
           owner_id?: string;
+          status?: 'active' | 'archived' | 'suspended';
           is_active?: boolean;
           settings?: Record<string, unknown>;
           created_at?: string;
@@ -637,6 +640,9 @@ export interface Database {
             | 'other';
           expires_at: string | null;
           last_rotated_at: string | null;
+          last_accessed_at: string | null;
+          auto_rotation: boolean;
+          rotation_interval_days: number;
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -660,6 +666,9 @@ export interface Database {
             | 'other';
           expires_at?: string | null;
           last_rotated_at?: string | null;
+          last_accessed_at?: string | null;
+          auto_rotation?: boolean;
+          rotation_interval_days?: number;
           created_by: string;
           created_at?: string;
           updated_at?: string;
@@ -683,6 +692,9 @@ export interface Database {
             | 'other';
           expires_at?: string | null;
           last_rotated_at?: string | null;
+          last_accessed_at?: string | null;
+          auto_rotation?: boolean;
+          rotation_interval_days?: number;
           created_by?: string;
           created_at?: string;
           updated_at?: string;

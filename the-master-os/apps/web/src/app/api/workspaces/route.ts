@@ -48,7 +48,7 @@ function generateSlug(name: string): string {
 
 // ── GET /api/workspaces ────────────────────────────────────────────
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
@@ -60,12 +60,23 @@ export async function GET(_request: NextRequest) {
       return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
+    // Parse query params
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('include_archived') === 'true';
+
     // Fetch workspaces (RLS auto-applied via owner_id matching auth.uid())
-    const { data: workspaces, error: wsError } = await supabase
+    let query = supabase
       .from('workspaces')
       .select('*')
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
+
+    // Filter by status unless archived are explicitly requested
+    if (!includeArchived) {
+      query = query.eq('status', 'active');
+    }
+
+    const { data: workspaces, error: wsError } = await query;
 
     if (wsError) {
       return apiError(
@@ -82,6 +93,7 @@ export async function GET(_request: NextRequest) {
           { count: agentCount },
           { count: pipelineCount },
           { data: creditData },
+          { count: memberCount },
         ] = await Promise.all([
           // Agent count for this workspace
           supabase
@@ -103,6 +115,12 @@ export async function GET(_request: NextRequest) {
             .eq('workspace_id', ws.id)
             .order('created_at', { ascending: false })
             .limit(1),
+          // Member count
+          supabase
+            .from('workspace_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('workspace_id', ws.id)
+            .is('deleted_at', null),
         ]);
 
         const settings = ws.settings as Record<string, unknown>;
@@ -115,6 +133,7 @@ export async function GET(_request: NextRequest) {
             creditData && creditData.length > 0
               ? (creditData[0]?.balance_after ?? 0)
               : 0,
+          member_count: memberCount ?? 0,
           category: (settings?.category as string) ?? undefined,
           icon: (settings?.icon as string) ?? undefined,
         };
@@ -204,6 +223,7 @@ export async function POST(request: NextRequest) {
           agent_count: 0,
           active_pipeline_count: 0,
           credit_balance: 0,
+          member_count: 1, // Owner is auto-added by trigger
           category: (settings?.category as string) ?? 'other',
           icon: (settings?.icon as string) ?? 'Building2',
         },

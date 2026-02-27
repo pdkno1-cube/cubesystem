@@ -33,6 +33,7 @@ interface AgentCardProps {
   onAssign: (agentId: string) => void;
   onRelease: (agentId: string, workspaceId: string) => void;
   onDelete: (agentId: string) => void;
+  onSelect: (agent: AgentWithAssignment) => void;
 }
 
 const CATEGORY_CONFIG: Record<
@@ -110,12 +111,15 @@ function getAgentPoolStatus(
   agent: AgentWithAssignment
 ): AgentPoolStatus {
   const activeAssignment = agent.agent_assignments?.find((a) => a.is_active);
-  if (!activeAssignment) {return 'pool';}
+  if (!activeAssignment) {
+    return 'pool';
+  }
   if (
     activeAssignment.status === 'idle' ||
     activeAssignment.status === 'running'
-  )
-    {return 'active';}
+  ) {
+    return 'active';
+  }
   return 'paused';
 }
 
@@ -148,6 +152,7 @@ export function AgentCard({
   onAssign,
   onRelease,
   onDelete,
+  onSelect,
 }: AgentCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -164,7 +169,18 @@ export function AgentCard({
   )?.workspaces?.name;
 
   return (
-    <div className="group relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:border-gray-300 hover:shadow-md">
+    <div
+      className="group relative cursor-pointer rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
+      onClick={() => onSelect(agent)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(agent);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
       {/* Top Row: Icon + Name + Menu */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -190,6 +206,7 @@ export function AgentCard({
           <DropdownMenu.Trigger asChild>
             <button
               type="button"
+              onClick={(e) => e.stopPropagation()}
               className="rounded-md p-1 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100"
             >
               <MoreVertical className="h-4 w-4" />
@@ -204,8 +221,9 @@ export function AgentCard({
             >
               <DropdownMenu.Item
                 className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
-                onSelect={() => {
-                  /* TODO: open detail view */
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onSelect(agent);
                 }}
               >
                 <Eye className="h-4 w-4" />
@@ -215,7 +233,10 @@ export function AgentCard({
               {poolStatus === 'pool' ? (
                 <DropdownMenu.Item
                   className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
-                  onSelect={() => onAssign(agent.id)}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onAssign(agent.id);
+                  }}
                 >
                   <ArrowRightLeft className="h-4 w-4" />
                   워크스페이스 할당
@@ -223,9 +244,10 @@ export function AgentCard({
               ) : activeAssignment ? (
                 <DropdownMenu.Item
                   className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
-                  onSelect={() =>
-                    onRelease(agent.id, activeAssignment.workspace_id)
-                  }
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onRelease(agent.id, activeAssignment.workspace_id);
+                  }}
                 >
                   <ArrowRightLeft className="h-4 w-4" />
                   풀로 회수
@@ -236,7 +258,10 @@ export function AgentCard({
 
               <DropdownMenu.Item
                 className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 outline-none hover:bg-red-50"
-                onSelect={() => onDelete(agent.id)}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onDelete(agent.id);
+                }}
               >
                 <Trash2 className="h-4 w-4" />
                 삭제
@@ -283,6 +308,35 @@ export function AgentCard({
           </span>
         </div>
       ) : null}
+
+      {/* Quick action buttons */}
+      <div className="mt-3 flex gap-2">
+        {poolStatus === 'pool' ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAssign(agent.id);
+            }}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100"
+          >
+            <ArrowRightLeft className="h-3 w-3" />
+            배정
+          </button>
+        ) : activeAssignment ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRelease(agent.id, activeAssignment.workspace_id);
+            }}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100"
+          >
+            <ArrowRightLeft className="h-3 w-3" />
+            해제
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

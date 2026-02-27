@@ -8,6 +8,11 @@ export interface WorkspaceOverview {
   created_at: string;
   agent_count: number;
   active_agents: number;
+  pipeline_queued: number;
+  pipeline_running: number;
+  pipeline_completed: number;
+  pipeline_error: number;
+  credit_balance: number;
 }
 
 export interface PipelineExecution {
@@ -41,6 +46,15 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface SystemHealth {
+  fastapi: 'healthy' | 'unhealthy' | 'unknown';
+  supabase: 'healthy' | 'unhealthy' | 'unknown';
+  mcp: {
+    connected: number;
+    total: number;
+  };
+}
+
 export interface DashboardData {
   workspaces: {
     total: number;
@@ -57,11 +71,16 @@ export interface DashboardData {
     running: number;
     completed: number;
     error: number;
+    today_executions: number;
     recent: PipelineExecution[];
   };
   credits: {
     total_balance: number;
     recent_usage: number;
   };
+  content: {
+    published_this_week: number;
+  };
+  system_health: SystemHealth;
   audit_logs: AuditLog[];
 }

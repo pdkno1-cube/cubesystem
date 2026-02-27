@@ -32,6 +32,7 @@ const createSecretSchema = z.object({
   value: z
     .string()
     .min(1, '시크릿 값은 필수입니다.'),
+  expires_at: z.string().datetime().optional(),
 });
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -65,9 +66,32 @@ function sanitizeSecret(
   return safe;
 }
 
-// NOTE: A future "reveal" endpoint (e.g. GET /api/vault/[id]/reveal)
-// would need to call decrypt(encrypted_value, iv, auth_tag) from @/lib/crypto
-// to return the original plaintext value to authorised users.
+/**
+ * Records a vault access audit log entry.
+ * Fire-and-forget: failures are logged but do not block the response.
+ */
+async function recordVaultAudit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  action: string,
+  resourceId: string | null,
+  details: Record<string, unknown>,
+): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    await untyped(supabase).from('audit_logs').insert({
+      user_id: userId,
+      action,
+      category: 'vault',
+      resource_type: 'secret_vault',
+      resource_id: resourceId,
+      details,
+      severity: 'info',
+    });
+  } catch {
+    // Audit logging failure must not block the operation
+  }
+}
 
 // ── GET /api/vault ─────────────────────────────────────────────────
 
@@ -113,6 +137,11 @@ export async function GET(_request: NextRequest) {
       return sanitizeSecret({ ...secretRow, workspace_name });
     });
 
+    // Record vault list access in audit log (fire-and-forget)
+    void recordVaultAudit(supabase, user.id, 'vault.list', null, {
+      count: sanitized.length,
+    });
+
     return NextResponse.json({
       data: sanitized,
       total: sanitized.length,
@@ -149,7 +178,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, workspace_id, category, value } = parseResult.data;
+    const { name, workspace_id, category, value, expires_at } = parseResult.data;
     const slug = generateSlug(name);
 
     // AES-256-GCM encryption — value is never stored in plaintext
@@ -159,20 +188,26 @@ export async function POST(request: NextRequest) {
       authTag: encAuthTag,
     } = encrypt(value);
 
+    const insertPayload: Record<string, unknown> = {
+      name,
+      slug,
+      workspace_id,
+      category,
+      encrypted_value: encryptedValue,
+      iv: encIv,
+      auth_tag: encAuthTag,
+      key_version: 1,
+      created_by: user.id,
+    };
+
+    if (expires_at) {
+      insertPayload.expires_at = expires_at;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const { data: rawSecret, error: insertError } = await untyped(supabase)
       .from('secret_vault')
-      .insert({
-        name,
-        slug,
-        workspace_id,
-        category,
-        encrypted_value: encryptedValue,
-        iv: encIv,
-        auth_tag: encAuthTag,
-        key_version: 1,
-        created_by: user.id,
-      })
+      .insert(insertPayload)
       .select(
         `
         *,
@@ -202,6 +237,13 @@ export async function POST(request: NextRequest) {
     };
     const workspace_name = created.workspaces?.name ?? '알 수 없음';
     const { workspaces: _ws, ...secretRow } = created;
+
+    // Record vault create in audit log (fire-and-forget)
+    void recordVaultAudit(supabase, user.id, 'vault.create', created.id, {
+      name,
+      category,
+      workspace_id,
+    });
 
     return NextResponse.json(
       { data: sanitizeSecret({ ...secretRow, workspace_name }) },

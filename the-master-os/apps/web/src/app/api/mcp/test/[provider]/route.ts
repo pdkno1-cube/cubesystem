@@ -25,13 +25,15 @@ export async function POST(
     return NextResponse.json(await upstream.json(), { status: upstream.status });
   }
 
-  // Dev fallback — return a mock test result
+  // Dev fallback — return a mock test result with simulated response time
+  const mockResponseTimeMs = Math.round(Math.random() * 500 + 100);
   return NextResponse.json({
     data: {
       healthy: false,
       provider,
       health_status: 'down',
       tested_at: new Date().toISOString(),
+      response_time_ms: mockResponseTimeMs,
       note: 'FastAPI unavailable — connect FASTAPI_URL to run real tests',
     },
   });

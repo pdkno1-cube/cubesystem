@@ -31,7 +31,6 @@ export interface MfaEnrollResult {
   factorId: string;
   totpUri: string;
   qrCode: string;
-  secret: string;
 }
 
 export interface MfaVerifyRequest {

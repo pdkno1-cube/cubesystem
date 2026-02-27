@@ -1,6 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { apiError, handleApiError, escapeLike, type ApiErrorBody } from "@/lib/api-response";
+import { type NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { apiError, handleApiError, escapeLike, type ApiErrorBody } from '@/lib/api-response';
 
 const MAX_PAGE_LIMIT = 100;
 
@@ -16,7 +16,7 @@ interface AuditLogEntry {
   resource_id: string | null;
   details: Record<string, unknown>;
   ip_address: string | null;
-  severity: "info" | "warning" | "error" | "critical";
+  severity: 'info' | 'warning' | 'error' | 'critical';
   created_at: string;
 }
 
@@ -38,35 +38,55 @@ export async function GET(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return apiError("UNAUTHORIZED", "인증이 필요합니다.", 401);
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
     const { searchParams } = request.nextUrl;
-    const page = Math.max(parseInt(searchParams.get("page") ?? "1", 10), 1);
+    const page = Math.max(parseInt(searchParams.get('page') ?? '1', 10), 1);
     const limit = Math.min(
-      Math.max(parseInt(searchParams.get("limit") ?? "20", 10), 1),
+      Math.max(parseInt(searchParams.get('limit') ?? '20', 10), 1),
       MAX_PAGE_LIMIT,
     );
-    const action = searchParams.get("action");
-    const workspaceId = searchParams.get("workspace_id");
-    const severity = searchParams.get("severity");
+    const action = searchParams.get('action');
+    const workspaceId = searchParams.get('workspace_id');
+    const severity = searchParams.get('severity');
+    const agentId = searchParams.get('agent_id');
+    const keyword = searchParams.get('keyword');
+    const dateFrom = searchParams.get('date_from');
+    const dateTo = searchParams.get('date_to');
 
     const offset = (page - 1) * limit;
 
     // Build query
     let query = supabase
-      .from("audit_logs")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false });
+      .from('audit_logs')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
 
     if (action) {
-      query = query.ilike("action", `%${escapeLike(action)}%`);
+      query = query.ilike('action', `%${escapeLike(action)}%`);
     }
     if (workspaceId) {
-      query = query.eq("workspace_id", workspaceId);
+      query = query.eq('workspace_id', workspaceId);
     }
     if (severity) {
-      query = query.eq("severity", severity);
+      query = query.eq('severity', severity);
+    }
+    if (agentId) {
+      query = query.eq('agent_id', agentId);
+    }
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom);
+    }
+    if (dateTo) {
+      // Add time to end of day for inclusive range
+      const endDate = dateTo.includes('T') ? dateTo : `${dateTo}T23:59:59.999Z`;
+      query = query.lte('created_at', endDate);
+    }
+    if (keyword) {
+      query = query.or(
+        `action.ilike.%${escapeLike(keyword)}%,resource_type.ilike.%${escapeLike(keyword)}%`,
+      );
     }
 
     query = query.range(offset, offset + limit - 1);
@@ -75,7 +95,7 @@ export async function GET(
 
     if (logsError) {
       return apiError(
-        "DB_ERROR",
+        'DB_ERROR',
         `감사 로그 조회 실패: ${logsError.message}`,
         500,
       );
@@ -101,9 +121,9 @@ export async function GET(
     const workspaceNameMap = new Map<string, string>();
     if (workspaceIds.length > 0) {
       const { data: workspaces } = await supabase
-        .from("workspaces")
-        .select("id, name")
-        .in("id", workspaceIds);
+        .from('workspaces')
+        .select('id, name')
+        .in('id', workspaceIds);
       for (const ws of workspaces ?? []) {
         workspaceNameMap.set(ws.id as string, ws.name as string);
       }
@@ -113,9 +133,9 @@ export async function GET(
     const userNameMap = new Map<string, string>();
     if (userIds.length > 0) {
       const { data: users } = await supabase
-        .from("users")
-        .select("id, display_name")
-        .in("id", userIds);
+        .from('users')
+        .select('id, display_name')
+        .in('id', userIds);
       for (const userRecord of users ?? []) {
         userNameMap.set(
           userRecord.id as string,
@@ -137,7 +157,7 @@ export async function GET(
       resource_id: (log.resource_id as string) ?? null,
       details: (log.details as Record<string, unknown>) ?? {},
       ip_address: (log.ip_address as string) ?? null,
-      severity: log.severity as AuditLogEntry["severity"],
+      severity: log.severity as AuditLogEntry['severity'],
       created_at: log.created_at as string,
     }));
 
@@ -148,6 +168,6 @@ export async function GET(
       limit,
     });
   } catch (error) {
-    return handleApiError(error, "audit-logs.GET");
+    return handleApiError(error, 'audit-logs.GET');
   }
 }

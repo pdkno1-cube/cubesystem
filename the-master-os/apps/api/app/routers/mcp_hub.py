@@ -15,6 +15,7 @@ Design:
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -346,6 +347,7 @@ async def test_provider(
 
     tested_at = datetime.now(tz=timezone.utc)
     healthy = False
+    start_time = time.monotonic()
 
     try:
         healthy = await registry.health_check(provider, workspace_id)
@@ -354,11 +356,14 @@ async def test_provider(
             "MCP test failed: provider=%s workspace=%s error=%s", provider, workspace_id, exc
         )
 
+    response_time_ms = round((time.monotonic() - start_time) * 1000)
+
     new_health = "healthy" if healthy else "down"
     test_result = {
         "healthy": healthy,
         "tested_at": tested_at.isoformat(),
         "tested_by": user.user_id,
+        "response_time_ms": response_time_ms,
     }
 
     # Persist result to the connection row
@@ -381,5 +386,6 @@ async def test_provider(
             "provider": provider,
             "health_status": new_health,
             "tested_at": tested_at.isoformat(),
+            "response_time_ms": response_time_ms,
         }
     )

@@ -7,9 +7,11 @@ import {
   ArrowLeft,
   Pencil,
   Archive,
+  RotateCcw,
   Bot,
   GitBranch,
   CreditCard,
+  Users,
   FileText,
   Building2,
   Truck,
@@ -23,6 +25,14 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { EditWorkspaceDialog } from '../edit-workspace-dialog';
 import { cn } from '@/lib/utils';
@@ -95,9 +105,13 @@ export function WorkspaceDetailClient({
   credits,
 }: WorkspaceDetailClientProps) {
   const router = useRouter();
-  const { archiveWorkspace } = useWorkspaceStore();
+  const { archiveWorkspace, restoreWorkspace } = useWorkspaceStore();
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const isArchived = workspace.status === 'archived';
 
   const Icon = workspace.icon && workspace.icon in ICON_MAP
     ? ICON_MAP[workspace.icon]!
@@ -114,8 +128,19 @@ export function WorkspaceDetailClient({
       router.push('/workspaces');
     } finally {
       setIsArchiving(false);
+      setIsArchiveConfirmOpen(false);
     }
   }, [archiveWorkspace, workspace.id, router]);
+
+  const handleRestore = useCallback(async () => {
+    setIsRestoring(true);
+    try {
+      await restoreWorkspace(workspace.id);
+      router.refresh();
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [restoreWorkspace, workspace.id, router]);
 
   const formattedDate = new Date(workspace.created_at).toLocaleDateString(
     'ko-KR',
@@ -128,7 +153,7 @@ export function WorkspaceDetailClient({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => router.push('/workspaces')}
+          onClick={() => { router.push('/workspaces'); }}
           className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
           aria-label="워크스페이스 목록으로 돌아가기"
         >
@@ -137,10 +162,34 @@ export function WorkspaceDetailClient({
         <span className="text-sm text-gray-400">워크스페이스</span>
       </div>
 
+      {/* Archived banner */}
+      {isArchived ? (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Archive className="h-4 w-4 text-amber-600" />
+            <span className="text-sm font-medium text-amber-800">
+              이 워크스페이스는 아카이브 상태입니다.
+            </span>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => { void handleRestore(); }}
+            isLoading={isRestoring}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            복원
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50">
-            <Icon className="h-7 w-7 text-brand-600" />
+          <div className={cn(
+            'flex h-14 w-14 items-center justify-center rounded-xl',
+            isArchived ? 'bg-gray-100' : 'bg-brand-50',
+          )}>
+            <Icon className={cn('h-7 w-7', isArchived ? 'text-gray-400' : 'text-brand-600')} />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -148,34 +197,41 @@ export function WorkspaceDetailClient({
             </h1>
             <div className="mt-1 flex items-center gap-2">
               <Badge variant="info">{categoryLabel}</Badge>
+              {isArchived ? <Badge variant="default">아카이브</Badge> : null}
               <span className="text-sm text-gray-500">{formattedDate}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsEditOpen(true)}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            수정
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleArchive}
-            isLoading={isArchiving}
-          >
-            <Archive className="h-3.5 w-3.5" />
-            아카이브
-          </Button>
-        </div>
+        {!isArchived ? (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => { setIsEditOpen(true); }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              수정
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => { setIsArchiveConfirmOpen(true); }}
+            >
+              <Archive className="h-3.5 w-3.5" />
+              아카이브
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <StatCard
+          icon={Users}
+          label="멤버"
+          value={workspace.member_count}
+        />
         <StatCard
           icon={Bot}
           label="할당된 에이전트"
@@ -247,6 +303,38 @@ export function WorkspaceDetailClient({
         open={isEditOpen}
         onOpenChange={setIsEditOpen}
       />
+
+      {/* Archive Confirm Dialog */}
+      <Dialog open={isArchiveConfirmOpen} onOpenChange={setIsArchiveConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>워크스페이스 아카이브</DialogTitle>
+            <DialogDescription>
+              <strong>{workspace.name}</strong>를 아카이브하시겠습니까?
+              아카이브된 워크스페이스는 목록에서 숨겨지며, 나중에 복원할 수 있습니다.
+              모든 에이전트 할당이 비활성화됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => { setIsArchiveConfirmOpen(false); }}
+              disabled={isArchiving}
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => { void handleArchive(); }}
+              isLoading={isArchiving}
+            >
+              <Archive className="h-3.5 w-3.5" />
+              아카이브
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -308,6 +396,18 @@ function OverviewTab({ workspace }: { workspace: WorkspaceWithStats }) {
             <dd className="mt-1">
               <Badge variant="info">{categoryLabel}</Badge>
             </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">상태</dt>
+            <dd className="mt-1">
+              <Badge variant={workspace.status === 'active' ? 'success' : 'default'}>
+                {workspace.status === 'active' ? '활성' : workspace.status === 'archived' ? '아카이브' : '중지'}
+              </Badge>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">멤버</dt>
+            <dd className="mt-1 text-sm text-gray-700">{workspace.member_count}명</dd>
           </div>
           <div>
             <dt className="text-xs text-gray-500">생성일</dt>

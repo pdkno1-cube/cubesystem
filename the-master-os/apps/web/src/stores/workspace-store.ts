@@ -12,15 +12,18 @@ interface WorkspaceState {
   selectedWorkspace: WorkspaceWithStats | null;
   isLoading: boolean;
   error: ApiError | null;
+  showArchived: boolean;
 
   setWorkspaces: (workspaces: WorkspaceWithStats[]) => void;
   setSelectedWorkspace: (workspace: WorkspaceWithStats | null) => void;
+  setShowArchived: (show: boolean) => void;
 
-  fetchWorkspaces: () => Promise<void>;
+  fetchWorkspaces: (includeArchived?: boolean) => Promise<void>;
   fetchWorkspace: (id: string) => Promise<void>;
   createWorkspace: (data: CreateWorkspaceInput) => Promise<WorkspaceWithStats>;
   updateWorkspace: (id: string, data: UpdateWorkspaceInput) => Promise<void>;
   archiveWorkspace: (id: string) => Promise<void>;
+  restoreWorkspace: (id: string) => Promise<void>;
 }
 
 async function apiFetch<T>(
@@ -52,18 +55,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   selectedWorkspace: null,
   isLoading: false,
   error: null,
+  showArchived: false,
 
-  setWorkspaces: (workspaces) => set({ workspaces }),
-  setSelectedWorkspace: (workspace) => set({ selectedWorkspace: workspace }),
+  setWorkspaces: (workspaces) => { set({ workspaces }); },
+  setSelectedWorkspace: (workspace) => { set({ selectedWorkspace: workspace }); },
+  setShowArchived: (show) => { set({ showArchived: show }); },
 
-  fetchWorkspaces: async () => {
+  fetchWorkspaces: async (includeArchived) => {
     set({ isLoading: true, error: null });
+
+    const showArchivedParam = includeArchived ?? get().showArchived;
+    const url = showArchivedParam
+      ? '/api/workspaces?include_archived=true'
+      : '/api/workspaces';
 
     try {
       const result = await apiFetch<{
         data: WorkspaceWithStats[];
         count: number;
-      }>('/api/workspaces');
+      }>(url);
 
       if (result.error) {
         set({ isLoading: false, error: result.error });
@@ -127,6 +137,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       description: data.description ?? null,
       icon_url: data.icon ?? null,
       owner_id: '',
+      status: 'active',
       is_active: true,
       settings: { category: data.category, icon: data.icon },
       created_at: new Date().toISOString(),
@@ -135,6 +146,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       agent_count: 0,
       active_pipeline_count: 0,
       credit_balance: 0,
+      member_count: 1,
       category: data.category,
       icon: data.icon,
     };
@@ -264,9 +276,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     const previousWorkspaces = get().workspaces;
 
-    // Optimistic: remove from list
+    // Optimistic: mark as archived
     set({
-      workspaces: get().workspaces.filter((ws) => ws.id !== id),
+      workspaces: get().workspaces.map((ws) =>
+        ws.id === id ? { ...ws, status: 'archived' as const } : ws,
+      ),
     });
 
     try {
@@ -284,9 +298,71 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         return;
       }
 
-      set({ isLoading: false });
+      // If not showing archived, filter out
+      if (!get().showArchived) {
+        set({
+          workspaces: get().workspaces.filter((ws) => ws.id !== id),
+          isLoading: false,
+        });
+      } else {
+        set({ isLoading: false });
+      }
     } catch (error) {
       Sentry.captureException(error, { tags: { context: 'workspaces.archive' } });
+      set({
+        workspaces: previousWorkspaces,
+        isLoading: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: '네트워크 오류가 발생했습니다.',
+        },
+      });
+    }
+  },
+
+  restoreWorkspace: async (id) => {
+    set({ isLoading: true, error: null });
+
+    const previousWorkspaces = get().workspaces;
+
+    // Optimistic: mark as active
+    set({
+      workspaces: get().workspaces.map((ws) =>
+        ws.id === id ? { ...ws, status: 'active' as const } : ws,
+      ),
+    });
+
+    try {
+      const result = await apiFetch<{ data: WorkspaceWithStats }>(
+        `/api/workspaces/${id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'active' }),
+        },
+      );
+
+      if (result.error) {
+        set({
+          workspaces: previousWorkspaces,
+          isLoading: false,
+          error: result.error,
+        });
+        return;
+      }
+
+      const updated = result.data?.data;
+      if (updated) {
+        set({
+          workspaces: get().workspaces.map((ws) =>
+            ws.id === id ? updated : ws,
+          ),
+          isLoading: false,
+        });
+      } else {
+        set({ isLoading: false });
+      }
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'workspaces.restore' } });
       set({
         workspaces: previousWorkspaces,
         isLoading: false,

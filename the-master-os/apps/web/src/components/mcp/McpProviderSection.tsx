@@ -5,6 +5,10 @@ import * as Sentry from '@sentry/nextjs';
 import { Plug2 } from 'lucide-react';
 import { McpProviderCard, type ProviderStatus } from './McpProviderCard';
 import { ConnectProviderModal } from './ConnectProviderModal';
+import { McpHealthSummary } from './McpHealthSummary';
+import { McpHealthTimeline } from './McpHealthTimeline';
+import { useHealthMonitor } from './useHealthMonitor';
+import { useToast } from '@/hooks/use-toast';
 
 interface VaultSecret {
   id: string;
@@ -23,6 +27,8 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
   const [isLoading, setIsLoading] = useState(true);
   const [connectTarget, setConnectTarget] = useState<ProviderStatus | null>(null);
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
+
+  const { toast } = useToast();
 
   const fetchProviders = useCallback(async () => {
     if (!workspaceId) {
@@ -45,6 +51,37 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
   useEffect(() => {
     void fetchProviders();
   }, [fetchProviders]);
+
+  // ── Health Monitor Hook ──────────────────────────────────────────
+  const healthMonitorProviders = providers.map((p) => ({
+    provider: p.provider,
+    label: p.label,
+    is_connected: p.is_connected,
+    health_status: p.health_status,
+    last_health_check: p.last_health_check,
+  }));
+
+  const {
+    healthStates,
+    history,
+    isRefreshing,
+    refreshAll,
+    lastFullCheckAt,
+  } = useHealthMonitor({
+    workspaceId,
+    providers: healthMonitorProviders,
+    intervalMs: 60_000,
+    enabled: !isLoading && providers.length > 0,
+    onProviderDown: (provider: string, label: string) => {
+      toast({
+        title: `${label} 연결 장애`,
+        description: `${provider} 프로바이더가 응답하지 않습니다. 설정을 확인해주세요.`,
+        variant: 'error',
+      });
+    },
+  });
+
+  // ── Handlers ───────────────────────────────────────────────────
 
   const handleConnect = (provider: ProviderStatus) => {
     setConnectTarget(provider);
@@ -92,6 +129,16 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
         </div>
       </div>
 
+      {/* Health Summary Card */}
+      {!isLoading && providers.length > 0 && (
+        <McpHealthSummary
+          healthStates={healthStates}
+          isRefreshing={isRefreshing}
+          onRefreshAll={refreshAll}
+          lastFullCheckAt={lastFullCheckAt}
+        />
+      )}
+
       {/* Provider grid */}
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -112,9 +159,15 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
               onDisconnect={handleDisconnect}
               onTest={handleTest}
               isTesting={testingProvider === p.provider}
+              healthState={healthStates.get(p.provider)}
             />
           ))}
         </div>
+      )}
+
+      {/* Health Timeline */}
+      {!isLoading && history.length > 0 && (
+        <McpHealthTimeline history={history} />
       )}
 
       {/* Connect modal */}

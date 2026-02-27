@@ -32,6 +32,9 @@ export const WORKSPACE_ICONS = [
 
 export type WorkspaceIcon = (typeof WORKSPACE_ICONS)[number];
 
+// ── Status type ───────────────────────────────────────────────────
+export type WorkspaceStatus = 'active' | 'archived' | 'suspended';
+
 // ── API input/output shapes ────────────────────────────────────────
 export interface CreateWorkspaceInput {
   name: string;
@@ -47,12 +50,14 @@ export interface UpdateWorkspaceInput {
   category?: WorkspaceCategory;
   icon?: WorkspaceIcon;
   settings?: Record<string, unknown>;
+  status?: WorkspaceStatus;
 }
 
 export interface WorkspaceWithStats extends Workspace {
   agent_count: number;
   active_pipeline_count: number;
   credit_balance: number;
+  member_count: number;
   category?: WorkspaceCategory;
   icon?: WorkspaceIcon;
 }

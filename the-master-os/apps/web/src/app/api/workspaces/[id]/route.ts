@@ -29,6 +29,7 @@ const updateWorkspaceSchema = z.object({
     ])
     .optional(),
   settings: z.record(z.unknown()).optional(),
+  status: z.enum(['active', 'archived', 'suspended']).optional(),
 });
 
 const uuidSchema = z.string().uuid('유효하지 않은 워크스페이스 ID입니다.');
@@ -77,27 +78,39 @@ export async function GET(
       );
     }
 
-    // Agent count
-    const { count: agentCount } = await supabase
-      .from('agent_assignments')
-      .select('*', { count: 'exact', head: true })
-      .eq('workspace_id', id)
-      .eq('is_active', true);
-
-    // Active pipeline count
-    const { count: pipelineCount } = await supabase
-      .from('pipeline_executions')
-      .select('*', { count: 'exact', head: true })
-      .eq('workspace_id', id)
-      .in('status', ['pending', 'running']);
-
-    // Credit balance
-    const { data: rawCreditData } = await supabase
-      .from('credits')
-      .select('balance_after')
-      .eq('workspace_id', id)
-      .order('created_at', { ascending: false })
-      .limit(1);
+    // Parallel stat queries
+    const [
+      { count: agentCount },
+      { count: pipelineCount },
+      { data: rawCreditData },
+      { count: memberCount },
+    ] = await Promise.all([
+      // Agent count
+      supabase
+        .from('agent_assignments')
+        .select('*', { count: 'exact', head: true })
+        .eq('workspace_id', id)
+        .eq('is_active', true),
+      // Active pipeline count
+      supabase
+        .from('pipeline_executions')
+        .select('*', { count: 'exact', head: true })
+        .eq('workspace_id', id)
+        .in('status', ['pending', 'running']),
+      // Credit balance
+      supabase
+        .from('credits')
+        .select('balance_after')
+        .eq('workspace_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1),
+      // Member count
+      supabase
+        .from('workspace_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('workspace_id', id)
+        .is('deleted_at', null),
+    ]);
 
     const creditData = (rawCreditData ?? []) as Pick<CreditRow, 'balance_after'>[];
     const settings = workspace.settings as Record<string, unknown> | null;
@@ -111,6 +124,7 @@ export async function GET(
           creditData.length > 0
             ? Number(creditData[0]?.balance_after ?? 0)
             : 0,
+        member_count: memberCount ?? 0,
         category: (settings?.category as string) ?? undefined,
         icon: (settings?.icon as string) ?? undefined,
       },
@@ -156,16 +170,16 @@ export async function PATCH(
       );
     }
 
-    const { name, description, category, icon, settings } = parseResult.data;
+    const { name, description, category, icon, settings, status } = parseResult.data;
 
     // Fetch existing workspace to merge settings
     const { data: rawExisting } = await supabase
       .from('workspaces')
-      .select('settings, deleted_at')
+      .select('settings, deleted_at, status')
       .eq('id', id)
       .single();
 
-    const existing = rawExisting as Pick<WorkspaceRow, 'settings' | 'deleted_at'> | null;
+    const existing = rawExisting as Pick<WorkspaceRow, 'settings' | 'deleted_at' | 'status'> | null;
 
     if (!existing || existing.deleted_at) {
       return apiError('NOT_FOUND', '워크스페이스를 찾을 수 없습니다.', 404);
@@ -187,6 +201,14 @@ export async function PATCH(
     if (name !== undefined) { updatePayload.name = name; }
     if (description !== undefined) { updatePayload.description = description; }
     if (icon !== undefined) { updatePayload.icon_url = icon; }
+    if (status !== undefined) {
+      updatePayload.status = status;
+      // When restoring from archived, also restore is_active and clear deleted_at
+      if (status === 'active') {
+        updatePayload.is_active = true;
+        updatePayload.deleted_at = null;
+      }
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const { data: rawUpdated, error: updateError } = await untyped(supabase)
@@ -206,6 +228,13 @@ export async function PATCH(
       );
     }
 
+    // Fetch member count for the response
+    const { count: memberCount } = await supabase
+      .from('workspace_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', id)
+      .is('deleted_at', null);
+
     const updatedSettings = updated.settings as Record<string, unknown> | null;
 
     return NextResponse.json({
@@ -214,6 +243,7 @@ export async function PATCH(
         agent_count: 0,
         active_pipeline_count: 0,
         credit_balance: 0,
+        member_count: memberCount ?? 0,
         category: (updatedSettings?.category as string) ?? undefined,
         icon: (updatedSettings?.icon as string) ?? undefined,
       },
@@ -223,7 +253,7 @@ export async function PATCH(
   }
 }
 
-// ── DELETE /api/workspaces/:id (Soft Delete) ───────────────────────
+// ── DELETE /api/workspaces/:id (Archive — sets status to 'archived') ─
 
 export async function DELETE(
   _request: NextRequest,
@@ -246,13 +276,13 @@ export async function DELETE(
       return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
     }
 
-    // Soft delete: set deleted_at
+    // Archive: set status to 'archived', deleted_at, and is_active to false
     const now = new Date().toISOString();
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const { error: deleteError } = await untyped(supabase)
       .from('workspaces')
-      .update({ deleted_at: now, is_active: false, updated_at: now })
+      .update({ deleted_at: now, is_active: false, status: 'archived', updated_at: now })
       .eq('id', id);
 
     if (deleteError) {
