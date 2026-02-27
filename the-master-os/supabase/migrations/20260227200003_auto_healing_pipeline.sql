@@ -19,7 +19,7 @@ INSERT INTO pipelines (
     is_active,
     version
 ) VALUES (
-    '30000000-0000-0000-0000-000000000005',
+    '30000000-0000-0000-0000-000000000006',
     'Auto-Healing Pipeline',
     'auto-healing-pipeline',
     '시스템 장애 자동 감지 → 진단 → API 키 로테이션 / 프록시 전환 / 핫픽스 → 복구 검증 → 보고 파이프라인',
