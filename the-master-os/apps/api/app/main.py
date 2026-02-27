@@ -19,10 +19,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 
+from app.billing.cost_calculator import CostCalculator
+from app.billing.credits import CreditService
 from app.config import get_settings
+from app.llm.client import LLMClient
 from app.middleware.audit_logger import AuditLogMiddleware
 from app.middleware.rate_limiter import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.pipeline import PipelineEngine
 from app.routers import agents, health, pipelines
 from app.ws import ConnectionManager, ws_router
 
@@ -62,6 +66,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         logger.info("Sentry initialised (env=%s)", settings.sentry_environment)
 
+    # Initialise PipelineEngine with async Supabase client
+    try:
+        from supabase._async.client import create_client as create_async_client
+
+        supabase_async = await create_async_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+
+        credit_svc = CreditService(supabase_async)
+
+        app.state.pipeline_engine = PipelineEngine(
+            llm_client=app.state._llm_client,
+            mcp_registry=app.state._mcp_registry,
+            credit_service=credit_svc,
+            cost_calculator=app.state._cost_calculator,
+            ws_manager=app.state.ws_manager,
+            supabase=supabase_async,
+        )
+        logger.info("PipelineEngine initialised successfully")
+    except Exception:
+        logger.warning(
+            "PipelineEngine initialisation failed — pipeline endpoints will return 503",
+            exc_info=True,
+        )
+
     yield
 
     # --- Shutdown ---
@@ -88,6 +118,51 @@ def create_app() -> FastAPI:
     # --- State ---
     app.state.limiter = limiter
     app.state.ws_manager = ConnectionManager()
+
+    # --- Pipeline Engine ---
+    # Supabase async client is initialised lazily; import at runtime to
+    # avoid hard dependency during testing.
+    _supabase_client = None
+    _mcp_registry = None
+    try:
+        from supabase._async.client import AsyncClient as _AsyncClient, create_client
+
+        async def _init_supabase() -> _AsyncClient:
+            return await create_client(
+                settings.supabase_url,
+                settings.supabase_service_role_key,
+            )
+
+        # MCPRegistry and SecretVault require sync Supabase client for now
+        from supabase import create_client as create_sync_client
+
+        _sync_supabase = create_sync_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+
+        from app.mcp.registry import MCPRegistry
+        from app.security.vault import SecretVault
+
+        _vault = SecretVault(_sync_supabase)
+        _mcp_registry = MCPRegistry(vault=_vault, supabase_client=_sync_supabase)
+    except Exception:
+        logger.warning(
+            "Supabase/MCP initialisation deferred — "
+            "PipelineEngine will be registered during lifespan startup",
+            exc_info=True,
+        )
+
+    llm_client = LLMClient(settings)
+    cost_calculator = CostCalculator()
+    credit_service: CreditService | None = None
+
+    # PipelineEngine will be fully initialised in the lifespan handler
+    # once the async Supabase client is available.  We store partial
+    # references here so the lifespan can complete the wiring.
+    app.state._llm_client = llm_client
+    app.state._cost_calculator = cost_calculator
+    app.state._mcp_registry = _mcp_registry
 
     # --- Middleware (executed bottom-to-top) ---
 
