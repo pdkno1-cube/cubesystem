@@ -12,6 +12,7 @@ import {
   Shield,
   FileText,
   Settings,
+  CalendarDays,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/workspaces", label: "워크스페이스", icon: Building2 },
   { href: "/agents", label: "에이전트", icon: Bot },
   { href: "/pipelines", label: "파이프라인", icon: GitBranch },
+  { href: "/marketing", label: "마케팅 캘린더", icon: CalendarDays },
   { href: "/billing", label: "크레딧", icon: CreditCard },
   { href: "/vault", label: "시크릿 볼트", icon: Shield },
   { href: "/audit-logs", label: "감사 로그", icon: FileText },

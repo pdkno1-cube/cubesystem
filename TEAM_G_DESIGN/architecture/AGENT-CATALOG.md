@@ -92,50 +92,232 @@ MCP 의존성: 없음
 
 ---
 
-## 3. OSMU 마케팅 스웜 (One Source Multi Use Marketing Swarm)
+## 3. OSMU 마케팅 스웜 v2 (One Source Multi Use Marketing Swarm)
 
-### 3-1. 블로그 에이전트 (Blog Writer)
+> 업데이트: 2026.02.27 — 5개 전문 에이전트로 확장, 고급 바이럴 프롬프트 적용
+> 파이프라인: validate → analyze → [blog/insta/newsletter/shortform 병렬] → drive_save → review → finalize
+
+### 3-0. 마케팅 전략가 (Topic Analyst) ← 신규
+
 ```
-이름: BlogWriterAgent
+이름: TopicAnalystAgent
+Supabase ID: 20000000-0000-0000-0000-000000000007
+slug: topic-analyst-agent
 카테고리: OSMU 마케팅 스웜
-역할: 기획안을 SEO 최적화된 블로그 포스트로 변환
-입력: 마케팅 기획안 (핵심 메시지, 타겟 키워드)
-출력: 블로그 포스트 (제목, 본문, 메타 태그, 해시태그)
-사용 모델: Claude Sonnet (빠른 콘텐츠 생성)
-MCP 의존성: ChromaDB (기존 콘텐츠 참조)
+역할: 마케팅 기획안을 분석하여 4채널 채널별 전략 브리핑 생성
+사용 모델: claude-sonnet-4-20250514
+크레딧: 0.07/실행
+MCP 의존성: 없음
+
+[내재화 스킬]
+- Seth Godin 포지셔닝 철학
+- Gary Vaynerchuk 채널별 맞춤화
+- Alex Hormozi 가치 제안 구조화
+- Eugene Schwartz 인식 단계 이론 (5단계)
+- Robert Cialdini 심리 트리거 6원칙
+
+[입력 파라미터]
+- topic: 마케팅 기획안 원문
+- brand_name: 브랜드명
+- industry: 업종
+
+[출력 JSON]
+{
+  "topic_summary": "3줄 요약",
+  "target_audience": { "pain_points": [], "hidden_desires": [], "awareness_stage": 3 },
+  "psychological_triggers": ["희소성", "사회적증명", "권위"],
+  "core_message": "핵심 메시지 1문장",
+  "channel_strategy": { "blog": {}, "instagram": {}, "newsletter": {}, "shortform": {} },
+  "proof_elements": [],
+  "cta_hierarchy": { "primary": "", "secondary": "" }
+}
 ```
 
-### 3-2. 인스타그램 에이전트 (Instagram Creator)
+---
+
+### 3-1. 블로그 작가 — 바이럴 버전 (Blog Writer V2) ← 전면 업그레이드
+
+```
+이름: BlogWriterAgentV2
+Supabase ID: 20000000-0000-0000-0000-000000000008
+slug: blog-writer-v2
+카테고리: OSMU 마케팅 스웜
+역할: 100만 조회수 + 베스트셀러 작가 기법으로 SEO 블로그 생성
+사용 모델: claude-sonnet-4-20250514
+크레딧: 0.08/실행
+MCP 의존성: google_drive (find_or_create_folder)
+
+[내재화 스킬]
+- David Ogilvy: 헤드라인이 콘텐츠의 80% — 5개 제목 후보 작성
+- Joe Sugarman 미끄러운 경사면: 모든 문장이 다음 문장으로 미끄러지게
+- Eugene Schwartz: 갈망 극대화 (제품 말고 욕망을 팔아라)
+- Neil Patel 10X 콘텐츠: 경쟁 콘텐츠보다 10배 더 가치 있게
+- Gary Halbert 공감 오프닝: 독자 상황에 완전 공감으로 시작
+- PAS + AIDA 혼합 구조
+
+[훅 공식 선택]
+- 충격 통계형: "한국 중소기업의 87%가 모르는 사실"
+- 역설형: "더 많이 일할수록 더 가난해지는 이유"
+- 공감형: "[타겟 상황]을 겪어보셨나요?"
+- Big Promise형: "이 글을 읽으면 [구체적 결과]를 얻습니다"
+
+[본문 구조]
+1. HOOK (150자) — 스크롤 멈추게
+2. Problem — 독자 문제를 당사자보다 잘 설명
+3. Agitation — 방치하면 어떻게 되는가
+4. Solution — 구체적 방법론
+5. Authority — 데이터/사례로 신뢰
+6. Action — 지금 할 수 있는 첫 단계
+
+[출력 JSON]
+{
+  "title": "SEO 제목 (숫자+키워드+감정)",
+  "title_variants": ["대안A", "대안B"],
+  "meta_description": "140~155자",
+  "hook": "첫 150자 훅",
+  "content": "마크다운 본문 최소 2,500자",
+  "seo_keywords": { "primary": "", "secondary": [], "longtail": [] },
+  "hashtags": ["#태그 5개"],
+  "cta": { "text": "", "type": "" },
+  "psychological_triggers_used": []
+}
+
+[절대 금지]
+- "안녕하세요, 오늘은 X에 대해 알아보겠습니다" 류의 뻔한 오프닝
+- "많은 사람들이" 같은 애매한 표현 → 반드시 구체적 수치
+```
+
+---
+
+### 3-2. 인스타그램 크리에이터 (Instagram Creator) ← 신규 구현
+
 ```
 이름: InstaCreatorAgent
+Supabase ID: 20000000-0000-0000-0000-000000000009
+slug: insta-creator-agent
 카테고리: OSMU 마케팅 스웜
-역할: 기획안을 인스타그램 캐러셀/피드 콘텐츠로 변환
-입력: 마케팅 기획안, 브랜드 가이드
-출력: 캐러셀 텍스트 (슬라이드별), 해시태그, 캡션, 비주얼 지시서
-사용 모델: Claude Sonnet
-MCP 의존성: Figma (비주얼 렌더링)
+역할: 100만 팔로워 크리에이터 기법으로 캐러셀 콘텐츠 생성
+사용 모델: claude-sonnet-4-20250514
+크레딧: 0.08/실행
+MCP 의존성: figma (템플릿 적용), google_drive (저장)
+
+[내재화 스킬]
+- Alex Hormozi 캐러셀 공식: 슬라이드 1이 너무 좋아서 다음을 안 볼 수 없게
+- Dan Koe 미니멀 하이밸류: 여백과 단순함이 전문성 증명
+- Jay Shetty 감성 훅: 감정을 건드리면 저장·공유 폭발
+- 인스타 알고리즘: 저장 > 공유 > 댓글 > 좋아요 순 도달 결정
+
+[캐러셀 황금 공식]
+- 슬라이드 1 (커버): 3초 안에 스크롤 멈추는 훅
+  → 궁금증 갭 / Bold 숫자 / 역설 / 직접 호출
+- 슬라이드 2~3 (공감): 독자 상황 정확히 묘사
+- 슬라이드 4~6 (가치): 슬라이드당 핵심 1개 + 실행 팁
+- 슬라이드 7 (CTA): 저장 + 공유 + 팔로우 3단 유도
+
+[해시태그 전략 30개]
+- 대형(100만+): 10개
+- 중형(10~50만): 10개
+- 소형(1~10만): 10개
+- 업종 전용: 5개 필수
+
+[출력 JSON]
+{
+  "slides": [{ "slide_no": 1, "type": "cover", "headline": "", "sub_text": "", "visual": {} }],
+  "caption": "300자 캡션",
+  "hashtags": { "mega": [], "mid": [], "niche": [], "industry": [] },
+  "figma_params": { "template_id": "", "brand_color": "", "font_style": "" },
+  "engagement_prediction": { "save_trigger": "", "share_trigger": "", "comment_trigger": "" }
+}
 ```
 
-### 3-3. 뉴스레터 에이전트 (Newsletter Writer)
+---
+
+### 3-3. 뉴스레터 작가 (Newsletter Writer) ← 신규 구현
+
 ```
 이름: NewsletterAgent
+Supabase ID: 20000000-0000-0000-0000-000000000010
+slug: newsletter-writer
 카테고리: OSMU 마케팅 스웜
-역할: 기획안을 이메일 뉴스레터 형식으로 변환
-입력: 마케팅 기획안, 구독자 세그먼트 정보
-출력: 뉴스레터 HTML/텍스트 (제목줄, 프리헤더, 본문, CTA)
-사용 모델: Claude Haiku (간결한 콘텐츠)
-MCP 의존성: 없음
+역할: 영업왕 + 심리 마케팅으로 오픈율 50%+ 뉴스레터 생성
+사용 모델: claude-haiku-4-5-20251001 (비용 절감)
+크레딧: 0.04/실행
+MCP 의존성: resend (발송), google_drive (저장)
+
+[내재화 스킬]
+- Ben Settle 일일이메일: 스토리로 시작, 판매는 부산물
+- Russell Brunson Soap Opera Sequence: 오픈 루프로 다음 이메일 열게
+- Dan Kennedy Direct Response: 모든 문장이 다음 문장을 읽게
+- Justin Welsh: 한 가지 아이디어를 짧고 강하게
+- 영업왕 판매 심리: 고객이 NO 할 수 없는 Irresistible Offer 구조
+
+[제목줄 공식 — 오픈율 결정]
+- 호기심 갭: "이 한 가지를 몰라서 놓치고 있었습니다"
+- 숫자 약속: "17분 만에 [결과]를 얻는 방법"
+- 역설: "팔려고 하지 않을수록 더 팔린다"
+- 소문자 구어체: "솔직히 말할게요..." (친밀감)
+
+[이메일 구조 — Soap Opera 공식]
+1. 오프닝: 장면 묘사로 시작 (요약 절대 금지)
+2. 갈등 고조: 독자 페인 포인트를 당사자보다 잘 설명
+3. 해결사 등장: 핵심 인사이트 1가지
+4. 오픈 루프: 다음 이메일 예고
+5. CTA: 단 하나의 행동만 (버튼 1개)
+
+[출력 JSON]
+{
+  "subject_a": "감성형 제목줄 A (40자 이내)",
+  "subject_b": "이익형 제목줄 B (40자 이내)",
+  "preheader": "70자 이내 프리헤더",
+  "opening_story": "300자 오프닝 스토리",
+  "html_body": "완성형 HTML",
+  "text_body": "Plain text 버전",
+  "cta": { "button_text": "5단어 이내", "urgency": "" },
+  "open_loop": "다음 이메일 예고",
+  "estimated_open_rate": "예상 오픈율 %"
+}
 ```
 
-### 3-4. 숏폼 스크립트 에이전트 (Short-form Scripter)
+---
+
+### 3-4. 숏폼 스크립터 (Short-form Scripter) ← 신규 구현
+
 ```
 이름: ShortFormAgent
+Supabase ID: 20000000-0000-0000-0000-000000000011
+slug: shortform-scriptwriter
 카테고리: OSMU 마케팅 스웜
-역할: 기획안을 30~60초 숏폼 영상 스크립트로 변환
-입력: 마케팅 기획안, 플랫폼 (릴스/쇼츠/틱톡)
-출력: 숏폼 스크립트 (씬별 나레이션, 화면 지시, BGM 추천)
-사용 모델: Claude Sonnet
-MCP 의존성: 없음
+역할: MrBeast 공식 + 알고리즘 심리학으로 100만 조회수 숏폼 스크립트 생성
+사용 모델: claude-sonnet-4-20250514
+크레딧: 0.07/실행
+MCP 의존성: google_drive (저장)
+대상 플랫폼: 릴스 / 쇼츠 / 틱톡
+
+[내재화 스킬]
+- MrBeast 첫 3초 법칙: 첫 3초에 끝까지 볼 이유를 모두 담아라
+- Alex Hormozi Hook-Retain-Reward: 완벽한 도파민 루프
+- TikTok/Reels 알고리즘: 완료율 > 재시청 > 공유 > 댓글 순
+- 패턴 인터럽트: 3~5초마다 시각·청각 변화로 이탈 방지
+
+[숏폼 황금 구조]
+- 0~3초 (훅): "○○를 하지 마세요. 대신 이걸" / "솔직히 말할게요"
+- 3~40초 (유지): 패턴 인터럽트 + 오픈 루프 연속
+- 40~60초 (보상+CTA): 가장 강력한 가치를 마지막에
+
+[패턴 인터럽트 규칙]
+매 3~5초마다: 화면 전환 / 말 속도 변화 / 숫자 목록 / 오픈 루프
+
+[출력 JSON]
+{
+  "platform": "reels",
+  "total_duration_sec": 45,
+  "hook": { "text": "", "visual": "", "caption": "" },
+  "scenes": [{ "scene_no": 1, "start_sec": 0, "end_sec": 3, "narration": "", "visual": "", "caption_text": "", "bgm": "energetic", "edit_note": "" }],
+  "srt_content": "자막 파일 내용",
+  "cta": { "text": "", "action": "follow/save/comment" },
+  "pattern_interrupts": ["3초", "8초", "16초"],
+  "retention_prediction": "예상 완료율 %"
+}
 ```
 
 ---

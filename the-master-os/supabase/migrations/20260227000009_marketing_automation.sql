@@ -41,7 +41,7 @@ CREATE TRIGGER trg_newsletter_subscribers_updated_at
 CREATE TABLE content_schedules (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    pipeline_id     UUID REFERENCES pipeline_runs(id) ON DELETE SET NULL,
+    pipeline_id     UUID,   -- references pipeline_runs(id) when table is created
     channel         TEXT NOT NULL
                     CHECK (channel IN (
                         'instagram', 'newsletter', 'twitter', 'linkedin', 'blog'

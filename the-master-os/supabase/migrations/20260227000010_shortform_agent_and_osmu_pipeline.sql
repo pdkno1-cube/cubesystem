@@ -204,7 +204,7 @@ INSERT INTO pipelines (
     graph_definition,
     required_agents,
     required_mcps,
-    is_system,
+    is_system_default,
     is_active,
     version
 )
@@ -242,8 +242,8 @@ VALUES (
         {"from": "send_newsletter",     "to": "finalize"}
       ]
     }'::jsonb,
-    ARRAY['topic-analyst-agent', 'blog-writer-v2', 'insta-creator', 'newsletter-writer', 'shortform-scriptwriter', 'critic-agent'],
-    ARRAY['google_drive', 'slack', 'resend'],
+    '["topic-analyst-agent","blog-writer-v2","insta-creator","newsletter-writer","shortform-scriptwriter","critic-agent"]'::jsonb,
+    '["google_drive","slack","resend"]'::jsonb,
     true,
     true,
     2

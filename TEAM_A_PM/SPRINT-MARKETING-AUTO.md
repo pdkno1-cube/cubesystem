@@ -1,7 +1,27 @@
 # 스프린트 작업지시서 — 마케팅 자동화 완성
 
-> 담당: TEAM_A (PM) | 기반 PRD: PRD-MARKETING-AUTO-v1.md | 2026.02.27
+> 담당: TEAM_A (PM) | 기반 PRD: PRD-MARKETING-AUTO-v1.md | 2026.02.27 (v2 업데이트)
 > 총 세션: 7개 | 총 예상 토큰: ~82,000
+>
+> ## v2 변경 사항 (2026.02.27)
+> - 에이전트 5종 고급 프롬프트 완성 (seed.sql 등록 완료)
+> - OSMU 파이프라인 7노드→9노드, 4채널 병렬 구조로 업데이트 (page.tsx, seed.sql)
+> - BlogAgent → BlogWriterV2 (100만 조회수 공식)
+> - 신규: TopicAnalystAgent / InstaCreatorAgent / NewsletterAgent / ShortFormAgent
+> - generate_sns (BlogAgent) → generate_insta (InstaCreatorAgent) 교체
+> - generate_report (RealistAgent) → 제거 (전략 분석은 analyze_topic에서 수행)
+> - drive_save 노드 추가 (Google Drive 폴더 관리 MCP)
+>
+> ## 에이전트 크레딧 비용 (실행당)
+> | 에이전트 | 크레딧 | 모델 |
+> |---|---|---|
+> | TopicAnalystAgent | 0.07 | claude-sonnet |
+> | BlogWriterV2 | 0.08 | claude-sonnet |
+> | InstaCreatorAgent | 0.08 | claude-sonnet |
+> | NewsletterAgent | 0.04 | claude-haiku |
+> | ShortFormAgent | 0.07 | claude-sonnet |
+> | CriticAgent | 0.08 | claude-sonnet |
+> | **OSMU 총합** | **0.42** | |
 
 ---
 
