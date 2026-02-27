@@ -24,10 +24,14 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
 
   const fetchProviders = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      return;
+    }
     try {
       const res = await fetch(`/api/mcp/providers?workspace_id=${workspaceId}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        return;
+      }
       const result = await res.json() as { data: ProviderStatus[] };
       setProviders(result.data ?? []);
     } catch {
@@ -46,7 +50,9 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
   };
 
   const handleDisconnect = async (provider: ProviderStatus) => {
-    if (!provider.connection_id) return;
+    if (!provider.connection_id) {
+      return;
+    }
     try {
       await fetch(
         `/api/mcp/connections?workspace_id=${workspaceId}&connection_id=${provider.connection_id}`,
@@ -114,7 +120,9 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
       <ConnectProviderModal
         open={connectTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setConnectTarget(null);
+          if (!open) {
+            setConnectTarget(null);
+          }
         }}
         provider={connectTarget}
         workspaceId={workspaceId}

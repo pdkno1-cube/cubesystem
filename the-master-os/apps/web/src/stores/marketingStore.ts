@@ -19,6 +19,8 @@ export type ScheduleStatus =
   | 'failed'
   | 'cancelled';
 
+export type MarketingTab = 'calendar' | 'analytics';
+
 export interface ScheduleItem {
   id: string;
   workspace_id: string;
@@ -34,7 +36,32 @@ export interface ScheduleItem {
   created_at: string;
 }
 
+// Analytics types
+export interface ChannelBreakdown {
+  channel: string;
+  executions: number;
+  credits: number;
+}
+
+export interface AnalyticsOverview {
+  total_executions: number;
+  total_credits: number;
+  email_open_rate: number;
+  published_count: number;
+  channel_breakdown: ChannelBreakdown[];
+}
+
+export interface TimeseriesPoint {
+  date: string;
+  executions: number;
+  published: number;
+  email_opens: number;
+}
+
 interface MarketingState {
+  // Tab
+  activeTab: MarketingTab;
+
   // Calendar view
   viewYear: number;
   viewMonth: number; // 0-indexed (0=Jan, 11=Dec)
@@ -42,6 +69,11 @@ interface MarketingState {
   // Data
   schedules: ScheduleItem[];
   isLoading: boolean;
+
+  // Analytics
+  analyticsOverview: AnalyticsOverview | null;
+  analyticsTimeseries: TimeseriesPoint[];
+  analyticsLoading: boolean;
 
   // Selection
   selectedDate: string | null; // YYYY-MM-DD
@@ -55,6 +87,7 @@ interface MarketingState {
   workspaceId: string | null;
 
   // Actions
+  setActiveTab: (tab: MarketingTab) => void;
   setSchedules: (schedules: ScheduleItem[]) => void;
   setLoading: (loading: boolean) => void;
   setViewMonth: (year: number, month: number) => void;
@@ -71,6 +104,9 @@ interface MarketingState {
   removeSchedule: (id: string) => void;
   addSchedule: (schedule: ScheduleItem) => void;
   setWorkspaceId: (id: string) => void;
+  setAnalyticsOverview: (overview: AnalyticsOverview | null) => void;
+  setAnalyticsTimeseries: (points: TimeseriesPoint[]) => void;
+  setAnalyticsLoading: (loading: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,16 +116,21 @@ interface MarketingState {
 const now = new Date();
 
 export const useMarketingStore = create<MarketingState>()((set) => ({
+  activeTab: 'calendar' as MarketingTab,
   viewYear: now.getFullYear(),
   viewMonth: now.getMonth(),
   schedules: [],
   isLoading: false,
+  analyticsOverview: null,
+  analyticsTimeseries: [],
+  analyticsLoading: false,
   selectedDate: null,
   selectedSchedule: null,
   isSliderOpen: false,
   isCreateOpen: false,
   workspaceId: null,
 
+  setActiveTab: (activeTab) => set({ activeTab }),
   setSchedules: (schedules) => set({ schedules }),
   setLoading: (isLoading) => set({ isLoading }),
 
@@ -135,7 +176,9 @@ export const useMarketingStore = create<MarketingState>()((set) => ({
   moveSchedule: (id, newDate) =>
     set((state) => ({
       schedules: state.schedules.map((s) => {
-        if (s.id !== id) return s;
+        if (s.id !== id) {
+          return s;
+        }
         // Keep the original time, only change the date part
         const orig = new Date(s.scheduled_at);
         const [y = 0, m = 0, d = 0] = newDate.split('-').map(Number);
@@ -162,6 +205,9 @@ export const useMarketingStore = create<MarketingState>()((set) => ({
     set((state) => ({ schedules: [...state.schedules, schedule] })),
 
   setWorkspaceId: (workspaceId) => set({ workspaceId }),
+  setAnalyticsOverview: (analyticsOverview) => set({ analyticsOverview }),
+  setAnalyticsTimeseries: (analyticsTimeseries) => set({ analyticsTimeseries }),
+  setAnalyticsLoading: (analyticsLoading) => set({ analyticsLoading }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -175,7 +221,9 @@ export function groupByDate(
   const result: Record<string, ScheduleItem[]> = {};
   for (const s of schedules) {
     const dateKey = s.scheduled_at.slice(0, 10); // YYYY-MM-DD
-    if (!result[dateKey]) result[dateKey] = [];
+    if (!result[dateKey]) {
+      result[dateKey] = [];
+    }
     result[dateKey].push(s);
   }
   return result;

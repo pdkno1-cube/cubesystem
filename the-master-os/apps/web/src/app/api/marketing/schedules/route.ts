@@ -38,11 +38,15 @@ export async function GET(
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    if (!user) {
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    }
 
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get('workspace_id');
-    if (!workspaceId) return apiError('VALIDATION_ERROR', 'workspace_id is required', 400);
+    if (!workspaceId) {
+      return apiError('VALIDATION_ERROR', 'workspace_id is required', 400);
+    }
 
     const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
     if (!FASTAPI_URL) {
@@ -54,7 +58,9 @@ export async function GET(
         .is('deleted_at', null)
         .order('scheduled_at', { ascending: true });
 
-      if (error) return apiError('DB_ERROR', error.message, 500);
+      if (error) {
+        return apiError('DB_ERROR', error.message, 500);
+      }
       return NextResponse.json({ data: data ?? [], total: count ?? 0 });
     }
 
@@ -63,8 +69,12 @@ export async function GET(
     const channel = searchParams.get('channel');
     const page = searchParams.get('page') ?? '1';
     const limit = searchParams.get('limit') ?? '20';
-    if (status) params.set('status', status);
-    if (channel) params.set('channel', channel);
+    if (status) {
+      params.set('status', status);
+    }
+    if (channel) {
+      params.set('channel', channel);
+    }
     params.set('page', page);
     params.set('limit', limit);
 
@@ -93,7 +103,9 @@ export async function POST(
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    if (!user) {
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    }
 
     const body = await request.json() as CreateScheduleBody;
     if (!body.workspace_id || !body.channel || !body.title || !body.scheduled_at) {
@@ -119,7 +131,9 @@ export async function POST(
         .select()
         .single();
 
-      if (error) return apiError('DB_ERROR', error.message, 500);
+      if (error) {
+        return apiError('DB_ERROR', error.message, 500);
+      }
       return NextResponse.json({ data: data as ScheduleItem }, { status: 201 });
     }
 

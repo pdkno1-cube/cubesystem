@@ -97,7 +97,9 @@ function HealthBadge({ status }: { status: string }) {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '-';
+  if (!dateStr) {
+    return '-';
+  }
   try {
     return new Intl.DateTimeFormat('ko-KR', {
       month: '2-digit',

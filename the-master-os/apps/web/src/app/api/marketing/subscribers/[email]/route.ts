@@ -11,11 +11,15 @@ export async function DELETE(
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    if (!user) {
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    }
 
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get('workspace_id');
-    if (!workspaceId) return apiError('VALIDATION_ERROR', 'workspace_id is required', 400);
+    if (!workspaceId) {
+      return apiError('VALIDATION_ERROR', 'workspace_id is required', 400);
+    }
 
     const email = decodeURIComponent(params.email);
 
@@ -31,7 +35,9 @@ export async function DELETE(
         .eq('workspace_id', workspaceId)
         .select();
 
-      if (error) return apiError('DB_ERROR', error.message, 500);
+      if (error) {
+        return apiError('DB_ERROR', error.message, 500);
+      }
       return NextResponse.json({
         data: { email, unsubscribed: (data ?? []).length > 0 },
       });

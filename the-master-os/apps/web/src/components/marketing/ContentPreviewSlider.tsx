@@ -94,15 +94,21 @@ export function ContentPreviewSlider({
   // Close on Escape key
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+      }
     };
-    if (isOpen) document.addEventListener('keydown', handler);
+    if (isOpen) {
+      document.addEventListener('keydown', handler);
+    }
     return () => document.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
   // Focus trap into panel when opened
   useEffect(() => {
-    if (isOpen) panelRef.current?.focus();
+    if (isOpen) {
+      panelRef.current?.focus();
+    }
   }, [isOpen]);
 
   const colors = schedule

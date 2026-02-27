@@ -28,7 +28,9 @@ export async function PATCH(
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    if (!user) {
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    }
 
     const body = await request.json() as PatchBody;
 
@@ -44,8 +46,12 @@ export async function PATCH(
         .select()
         .single();
 
-      if (error) return apiError('DB_ERROR', error.message, 500);
-      if (!data) return apiError('NOT_FOUND', `Schedule '${params.id}' not found`, 404);
+      if (error) {
+        return apiError('DB_ERROR', error.message, 500);
+      }
+      if (!data) {
+        return apiError('NOT_FOUND', `Schedule '${params.id}' not found`, 404);
+      }
       return NextResponse.json({ data: data as ScheduleItem });
     }
 
@@ -79,7 +85,9 @@ export async function DELETE(
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    if (!user) {
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    }
 
     const { error } = await supabase
       .from('content_schedules')
@@ -89,7 +97,9 @@ export async function DELETE(
       })
       .eq('id', params.id);
 
-    if (error) return apiError('DB_ERROR', error.message, 500);
+    if (error) {
+      return apiError('DB_ERROR', error.message, 500);
+    }
     return NextResponse.json({ data: { deleted: true } });
   } catch (error) {
     return handleApiError(error, 'marketing.schedules.[id].DELETE');

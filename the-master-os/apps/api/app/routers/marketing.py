@@ -9,6 +9,9 @@ Endpoints:
   POST   /orchestrate/marketing/schedules               Create content schedule
   GET    /orchestrate/marketing/schedules               List schedules
   PATCH  /orchestrate/marketing/schedules/{id}          Update schedule status
+  GET    /orchestrate/marketing/analytics/overview      KPI overview (runs, credits, open rate)
+  GET    /orchestrate/marketing/analytics/timeseries    Daily timeseries (30 days)
+  POST   /orchestrate/marketing/webhooks/resend         Resend email webhook receiver
 
 PRD ref: TEAM_G_DESIGN/prd/PRD-MARKETING-AUTO-v1.md
 Skill ref: TEAM_F_SKILLS/registry/SKILL-NEWSLETTER-AGENT.md
@@ -17,11 +20,12 @@ Skill ref: TEAM_F_SKILLS/registry/SKILL-NEWSLETTER-AGENT.md
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
 from app.config import Settings, get_settings
@@ -143,6 +147,36 @@ class ContentScheduleResponse(BaseModel):
 class ScheduleStatusUpdate(BaseModel):
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
     error_message: str | None = None
+
+
+class ChannelBreakdown(BaseModel):
+    channel: str
+    executions: int
+    credits: float
+
+
+class AnalyticsOverviewResponse(BaseModel):
+    total_executions: int
+    total_credits: float
+    email_open_rate: float  # 0.0 ~ 1.0
+    published_count: int
+    channel_breakdown: list[ChannelBreakdown]
+
+
+class TimeseriesPoint(BaseModel):
+    date: str  # YYYY-MM-DD
+    executions: int
+    published: int
+    email_opens: int
+
+
+class AnalyticsTimeseriesResponse(BaseModel):
+    points: list[TimeseriesPoint]
+
+
+class WebhookEvent(BaseModel):
+    type: str  # email.opened, email.clicked, etc.
+    data: dict[str, object] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -607,6 +641,241 @@ async def update_schedule_status(
         )
 
     return BaseResponse(data=_row_to_schedule(result.data[0]))
+
+
+# ---------------------------------------------------------------------------
+# GET /orchestrate/marketing/analytics/overview
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/analytics/overview",
+    response_model=BaseResponse[AnalyticsOverviewResponse],
+    summary="KPI overview — executions, credits, open rate, channel breakdown",
+)
+async def analytics_overview(
+    workspace_id: str,
+    days: int = Query(30, ge=1, le=365),
+    user: AuthenticatedUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> BaseResponse[AnalyticsOverviewResponse]:
+    """Aggregate marketing KPIs from content_schedules, pipeline_executions, and content_metrics."""
+    sb = _supabase_client(settings)
+    since = (datetime.now(tz=timezone.utc) - timedelta(days=days)).isoformat()
+
+    # 1) Content schedules for channel breakdown + published count
+    sched_result = (
+        sb.table("content_schedules")
+        .select("channel, status, created_at")
+        .eq("workspace_id", workspace_id)
+        .gte("created_at", since)
+        .is_("deleted_at", "null")
+        .execute()
+    )
+    schedules: list[dict[str, object]] = sched_result.data or []
+
+    channel_counter: Counter[str] = Counter()
+    published_count = 0
+    for row in schedules:
+        ch = str(row.get("channel", "unknown"))
+        channel_counter[ch] += 1
+        if row.get("status") == "completed":
+            published_count += 1
+
+    # 2) Pipeline executions for total runs + credit sum
+    exec_result = (
+        sb.table("pipeline_executions")
+        .select("id, credits_used, created_at")
+        .eq("workspace_id", workspace_id)
+        .gte("created_at", since)
+        .execute()
+    )
+    executions: list[dict[str, object]] = exec_result.data or []
+    total_executions = len(executions)
+    total_credits = sum(float(row.get("credits_used", 0) or 0) for row in executions)
+
+    # 3) Email metrics for open rate (from aggregated opens column in content_metrics)
+    metrics_result = (
+        sb.table("content_metrics")
+        .select("opens, impressions, channel")
+        .eq("workspace_id", workspace_id)
+        .eq("channel", "newsletter")
+        .gte("created_at", since)
+        .execute()
+    )
+    metrics: list[dict[str, object]] = metrics_result.data or []
+    total_impressions = sum(int(m.get("impressions", 0) or 0) for m in metrics)
+    total_opens = sum(int(m.get("opens", 0) or 0) for m in metrics)
+    email_open_rate = (total_opens / total_impressions) if total_impressions > 0 else 0.0
+
+    # Build channel breakdown with estimated credits per channel
+    channel_breakdown = [
+        ChannelBreakdown(
+            channel=ch,
+            executions=count,
+            credits=round(total_credits * (count / len(schedules)), 2) if schedules else 0,
+        )
+        for ch, count in channel_counter.most_common()
+    ]
+
+    return BaseResponse(
+        data=AnalyticsOverviewResponse(
+            total_executions=total_executions,
+            total_credits=round(total_credits, 2),
+            email_open_rate=round(email_open_rate, 4),
+            published_count=published_count,
+            channel_breakdown=channel_breakdown,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /orchestrate/marketing/analytics/timeseries
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/analytics/timeseries",
+    response_model=BaseResponse[AnalyticsTimeseriesResponse],
+    summary="Daily timeseries — executions, published, email opens",
+)
+async def analytics_timeseries(
+    workspace_id: str,
+    days: int = Query(30, ge=1, le=365),
+    user: AuthenticatedUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> BaseResponse[AnalyticsTimeseriesResponse]:
+    """Return daily aggregated timeseries for the last N days."""
+    sb = _supabase_client(settings)
+    now = datetime.now(tz=timezone.utc)
+    since = (now - timedelta(days=days)).isoformat()
+
+    # Fetch all three data sources in sequence (PostgREST doesn't support GROUP BY)
+    exec_result = (
+        sb.table("pipeline_executions")
+        .select("created_at")
+        .eq("workspace_id", workspace_id)
+        .gte("created_at", since)
+        .execute()
+    )
+    sched_result = (
+        sb.table("content_schedules")
+        .select("published_at")
+        .eq("workspace_id", workspace_id)
+        .eq("status", "completed")
+        .gte("created_at", since)
+        .is_("deleted_at", "null")
+        .execute()
+    )
+    metrics_result = (
+        sb.table("content_metrics")
+        .select("created_at, opens")
+        .eq("workspace_id", workspace_id)
+        .eq("channel", "newsletter")
+        .gte("created_at", since)
+        .execute()
+    )
+
+    # Build day buckets
+    exec_by_day: defaultdict[str, int] = defaultdict(int)
+    for row in exec_result.data or []:
+        day = str(row.get("created_at", ""))[:10]
+        if day:
+            exec_by_day[day] += 1
+
+    pub_by_day: defaultdict[str, int] = defaultdict(int)
+    for row in sched_result.data or []:
+        day = str(row.get("published_at", ""))[:10]
+        if day:
+            pub_by_day[day] += 1
+
+    opens_by_day: defaultdict[str, int] = defaultdict(int)
+    for row in metrics_result.data or []:
+        day = str(row.get("created_at", ""))[:10]
+        if day:
+            opens_by_day[day] += int(row.get("opens", 0) or 0)
+
+    # Fill all days in range
+    points: list[TimeseriesPoint] = []
+    for i in range(days):
+        d = (now - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+        points.append(
+            TimeseriesPoint(
+                date=d,
+                executions=exec_by_day.get(d, 0),
+                published=pub_by_day.get(d, 0),
+                email_opens=opens_by_day.get(d, 0),
+            )
+        )
+
+    return BaseResponse(data=AnalyticsTimeseriesResponse(points=points))
+
+
+# ---------------------------------------------------------------------------
+# POST /orchestrate/marketing/webhooks/resend
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/webhooks/resend",
+    response_model=BaseResponse[dict[str, str]],
+    summary="Resend email webhook receiver (opens, clicks)",
+)
+async def resend_webhook(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+) -> BaseResponse[dict[str, str]]:
+    """Receive Resend webhook events (email.opened, email.clicked, etc.)
+    and record metrics in content_metrics. No auth required (external webhook).
+
+    Maps event types to columns: email.opened → opens, email.clicked → clicks.
+    """
+    body = await request.json()
+    event_type: str = body.get("type", "unknown")
+    event_data: dict[str, object] = body.get("data", {})
+
+    # Map Resend event types to content_metrics columns
+    column_map: dict[str, str] = {
+        "email.opened": "opens",
+        "email.clicked": "clicks",
+    }
+    metric_column = column_map.get(event_type)
+
+    if metric_column:
+        sb = _supabase_client(settings)
+        # Store as raw_data and increment the relevant counter.
+        # Without a schedule_id, we create a generic newsletter row per day.
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        try:
+            # Upsert: if a row already exists for today + newsletter channel, increment
+            existing = (
+                sb.table("content_metrics")
+                .select("id, opens, clicks")
+                .eq("channel", "newsletter")
+                .eq("metric_date", today)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                row = existing.data[0]
+                current_val = int(row.get(metric_column, 0) or 0)
+                sb.table("content_metrics").update({
+                    metric_column: current_val + 1,
+                    "raw_data": event_data,
+                }).eq("id", str(row["id"])).execute()
+            else:
+                # Need a workspace_id — extract from tags or use a default approach
+                insert_data: dict[str, object] = {
+                    "channel": "newsletter",
+                    "metric_date": today,
+                    metric_column: 1,
+                    "raw_data": event_data,
+                }
+                sb.table("content_metrics").insert(insert_data).execute()
+        except Exception:
+            logger.exception("Failed to store Resend webhook event: type=%s", event_type)
+
+    return BaseResponse(data={"status": "received", "type": event_type})
 
 
 # ---------------------------------------------------------------------------

@@ -34,10 +34,16 @@ function buildCalendarDays(year: number, month: number): (number | null)[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const days: (number | null)[] = [];
 
-  for (let i = 0; i < firstDay; i++) days.push(null);
-  for (let d = 1; d <= daysInMonth; d++) days.push(d);
+  for (let i = 0; i < firstDay; i++) {
+    days.push(null);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    days.push(d);
+  }
   const trailing = (7 - (days.length % 7)) % 7;
-  for (let i = 0; i < trailing; i++) days.push(null);
+  for (let i = 0; i < trailing; i++) {
+    days.push(null);
+  }
 
   return days;
 }
@@ -144,7 +150,7 @@ function CalendarCell({
       role="button"
       tabIndex={0}
       onClick={() => onDayClick(dateStr)}
-      onKeyDown={(e) => { if (e.key === 'Enter') onDayClick(dateStr); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') { onDayClick(dateStr); } }}
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -154,7 +160,9 @@ function CalendarCell({
       onDrop={(e) => {
         e.preventDefault();
         const scheduleId = e.dataTransfer.getData('text/plain');
-        if (scheduleId) onItemDrop(scheduleId, dateStr);
+        if (scheduleId) {
+          onItemDrop(scheduleId, dateStr);
+        }
         dragOverRef.current = false;
       }}
       className={clsx(

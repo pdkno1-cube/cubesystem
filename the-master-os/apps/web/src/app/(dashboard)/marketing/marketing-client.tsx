@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, CalendarDays, BarChart3 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { CalendarGrid } from '@/components/marketing/CalendarGrid';
 import { ContentPreviewSlider } from '@/components/marketing/ContentPreviewSlider';
+import { AnalyticsPanel } from '@/components/marketing/AnalyticsPanel';
 import {
   useMarketingStore,
   type ScheduleItem,
+  type MarketingTab,
   CHANNEL_COLORS,
   STATUS_LABELS,
 } from '@/stores/marketingStore';
@@ -43,11 +45,6 @@ function ChannelLegend() {
 // ---------------------------------------------------------------------------
 
 function MonthlySummary({ schedules }: { schedules: ScheduleItem[] }) {
-  const counts = schedules.reduce<Record<string, number>>((acc, s) => {
-    acc[s.channel] = (acc[s.channel] ?? 0) + 1;
-    return acc;
-  }, {});
-
   const completedCount = schedules.filter((s) => s.status === 'completed').length;
   const pendingCount = schedules.filter((s) => s.status === 'pending').length;
   const failedCount = schedules.filter((s) => s.status === 'failed').length;
@@ -148,23 +145,22 @@ export function MarketingClient({
   workspaceId,
 }: MarketingClientProps) {
   const {
+    activeTab,
+    setActiveTab,
     viewYear,
     viewMonth,
     schedules,
-    isLoading,
     selectedDate,
     selectedSchedule,
     isSliderOpen,
     prevMonth,
     nextMonth,
     setSchedules,
-    setLoading,
     selectDate,
     openSlider,
     closeSlider,
     updateScheduleStatus,
     moveSchedule,
-    removeSchedule,
     setWorkspaceId,
   } = useMarketingStore();
 
@@ -214,7 +210,9 @@ export function MarketingClient({
       moveSchedule(scheduleId, newDate);
       // Find the updated scheduled_at from store
       const item = schedules.find((s) => s.id === scheduleId);
-      if (!item) return;
+      if (!item) {
+        return;
+      }
 
       const orig = new Date(item.scheduled_at);
       const [y = 0, m = 0, d = 0] = newDate.split('-').map(Number);
@@ -254,7 +252,9 @@ export function MarketingClient({
   const handleSendNow = useCallback(
     async (id: string) => {
       const item = schedules.find((s) => s.id === id);
-      if (!item) return;
+      if (!item) {
+        return;
+      }
 
       updateScheduleStatus(id, 'running');
       try {
@@ -295,79 +295,114 @@ export function MarketingClient({
     ? schedules.filter((s) => s.scheduled_at.startsWith(selectedDate))
     : [];
 
+  const tabs: { key: MarketingTab; label: string; icon: typeof CalendarDays }[] = [
+    { key: 'calendar', label: '캘린더', icon: CalendarDays },
+    { key: 'analytics', label: '성과 분석', icon: BarChart3 },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-gray-900">콘텐츠 캘린더</h1>
-        <p className="text-sm text-gray-500">
-          OSMU 마케팅 파이프라인 콘텐츠 발행 일정을 관리합니다
-        </p>
+      {/* Page header + tab switcher */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold text-gray-900">마케팅</h1>
+          <p className="text-sm text-gray-500">
+            OSMU 마케팅 파이프라인 콘텐츠 발행 일정 및 성과를 관리합니다
+          </p>
+        </div>
+        <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={clsx(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700',
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Monthly summary */}
-      <MonthlySummary schedules={schedules} />
+      {/* Tab content */}
+      {activeTab === 'analytics' ? (
+        <AnalyticsPanel workspaceId={workspaceId} />
+      ) : (
+        <>
+          {/* Monthly summary */}
+          <MonthlySummary schedules={schedules} />
 
-      {/* Calendar section */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
-        <div className="flex flex-col gap-3">
-          {/* Calendar toolbar */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={prevMonth}
-                className="rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-50 transition-colors"
-                aria-label="이전 달"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="min-w-[120px] text-center text-base font-semibold text-gray-800">
-                {monthLabel}
-              </span>
-              <button
-                onClick={nextMonth}
-                className="rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-50 transition-colors"
-                aria-label="다음 달"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-              {isRefetching && (
-                <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
-              )}
+          {/* Calendar section */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
+            <div className="flex flex-col gap-3">
+              {/* Calendar toolbar */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={prevMonth}
+                    className="rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-50 transition-colors"
+                    aria-label="이전 달"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="min-w-[120px] text-center text-base font-semibold text-gray-800">
+                    {monthLabel}
+                  </span>
+                  <button
+                    onClick={nextMonth}
+                    className="rounded-lg border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-50 transition-colors"
+                    aria-label="다음 달"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  {isRefetching && (
+                    <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <ChannelLegend />
+                </div>
+              </div>
+
+              {/* Calendar grid */}
+              <CalendarGrid
+                year={viewYear}
+                month={viewMonth}
+                schedules={schedules}
+                selectedDate={selectedDate}
+                onDayClick={selectDate}
+                onItemClick={openSlider}
+                onItemDrop={handleItemDrop}
+              />
             </div>
-            <div className="flex items-center gap-3">
-              <ChannelLegend />
-            </div>
+
+            {/* Right panel: selected day items */}
+            <SelectedDayPanel
+              date={selectedDate}
+              items={selectedDayItems}
+              onItemClick={openSlider}
+            />
           </div>
 
-          {/* Calendar grid */}
-          <CalendarGrid
-            year={viewYear}
-            month={viewMonth}
-            schedules={schedules}
-            selectedDate={selectedDate}
-            onDayClick={selectDate}
-            onItemClick={openSlider}
-            onItemDrop={handleItemDrop}
+          {/* Content preview slider */}
+          <ContentPreviewSlider
+            schedule={selectedSchedule}
+            isOpen={isSliderOpen}
+            onClose={closeSlider}
+            onCancelSchedule={handleCancelSchedule}
+            onSendNow={handleSendNow}
           />
-        </div>
-
-        {/* Right panel: selected day items */}
-        <SelectedDayPanel
-          date={selectedDate}
-          items={selectedDayItems}
-          onItemClick={openSlider}
-        />
-      </div>
-
-      {/* Content preview slider */}
-      <ContentPreviewSlider
-        schedule={selectedSchedule}
-        isOpen={isSliderOpen}
-        onClose={closeSlider}
-        onCancelSchedule={handleCancelSchedule}
-        onSendNow={handleSendNow}
-      />
+        </>
+      )}
     </div>
   );
 }

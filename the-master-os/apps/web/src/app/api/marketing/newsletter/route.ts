@@ -28,7 +28,9 @@ export async function POST(
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    if (!user) {
+      return apiError('UNAUTHORIZED', '인증이 필요합니다.', 401);
+    }
 
     const body = await request.json() as NewsletterSendBody;
 
