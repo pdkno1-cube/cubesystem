@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const agents = (rawAgents ?? []) as unknown as AgentWithAssignments[];
+    const agents = (rawAgents ?? []) as AgentWithAssignments[];
 
     // Post-process status filter
     let filteredAgents = agents;

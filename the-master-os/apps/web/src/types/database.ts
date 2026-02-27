@@ -553,6 +553,7 @@ export interface Database {
             | 'google_drive'
             | 'figma'
             | 'slack'
+            | 'resend'
             | 'custom';
           endpoint_url: string;
           auth_method: 'api_key' | 'oauth2' | 'basic' | 'none';
@@ -561,6 +562,7 @@ export interface Database {
           health_status: 'healthy' | 'degraded' | 'down' | 'unknown';
           last_health_at: string | null;
           is_active: boolean;
+          test_result: Json | null;
           created_at: string;
           updated_at: string;
           deleted_at: string | null;
@@ -576,6 +578,7 @@ export interface Database {
             | 'google_drive'
             | 'figma'
             | 'slack'
+            | 'resend'
             | 'custom';
           endpoint_url: string;
           auth_method?: 'api_key' | 'oauth2' | 'basic' | 'none';
@@ -584,6 +587,7 @@ export interface Database {
           health_status?: 'healthy' | 'degraded' | 'down' | 'unknown';
           last_health_at?: string | null;
           is_active?: boolean;
+          test_result?: Json | null;
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
@@ -599,6 +603,7 @@ export interface Database {
             | 'google_drive'
             | 'figma'
             | 'slack'
+            | 'resend'
             | 'custom';
           endpoint_url?: string;
           auth_method?: 'api_key' | 'oauth2' | 'basic' | 'none';
@@ -607,6 +612,7 @@ export interface Database {
           health_status?: 'healthy' | 'degraded' | 'down' | 'unknown';
           last_health_at?: string | null;
           is_active?: boolean;
+          test_result?: Json | null;
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
@@ -1463,6 +1469,203 @@ export interface Database {
         };
         Relationships: [];
       };
+      newsletter_subscribers: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          email: string;
+          name: string | null;
+          status: 'active' | 'unsubscribed' | 'bounced' | 'complained';
+          tags: Json;
+          metadata: Json;
+          source: string | null;
+          subscribed_at: string;
+          unsubscribed_at: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          email: string;
+          name?: string | null;
+          status?: 'active' | 'unsubscribed' | 'bounced' | 'complained';
+          tags?: Json;
+          metadata?: Json;
+          source?: string | null;
+          subscribed_at?: string;
+          unsubscribed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          email?: string;
+          name?: string | null;
+          status?: 'active' | 'unsubscribed' | 'bounced' | 'complained';
+          tags?: Json;
+          metadata?: Json;
+          source?: string | null;
+          subscribed_at?: string;
+          unsubscribed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'newsletter_subscribers_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      content_schedules: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          pipeline_id: string | null;
+          channel: 'instagram' | 'newsletter' | 'twitter' | 'linkedin' | 'blog';
+          title: string;
+          content: Json;
+          status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+          scheduled_at: string;
+          published_at: string | null;
+          recurrence: 'none' | 'daily' | 'weekly' | 'monthly';
+          tags: Json;
+          error_message: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          pipeline_id?: string | null;
+          channel: 'instagram' | 'newsletter' | 'twitter' | 'linkedin' | 'blog';
+          title: string;
+          content?: Json;
+          status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+          scheduled_at: string;
+          published_at?: string | null;
+          recurrence?: 'none' | 'daily' | 'weekly' | 'monthly';
+          tags?: Json;
+          error_message?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          pipeline_id?: string | null;
+          channel?: 'instagram' | 'newsletter' | 'twitter' | 'linkedin' | 'blog';
+          title?: string;
+          content?: Json;
+          status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+          scheduled_at?: string;
+          published_at?: string | null;
+          recurrence?: 'none' | 'daily' | 'weekly' | 'monthly';
+          tags?: Json;
+          error_message?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'content_schedules_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'content_schedules_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      content_metrics: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          schedule_id: string | null;
+          channel: string;
+          metric_date: string;
+          impressions: number;
+          clicks: number;
+          likes: number;
+          shares: number;
+          comments: number;
+          opens: number;
+          unsubscribes: number;
+          raw_data: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          schedule_id?: string | null;
+          channel: string;
+          metric_date?: string;
+          impressions?: number;
+          clicks?: number;
+          likes?: number;
+          shares?: number;
+          comments?: number;
+          opens?: number;
+          unsubscribes?: number;
+          raw_data?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          schedule_id?: string | null;
+          channel?: string;
+          metric_date?: string;
+          impressions?: number;
+          clicks?: number;
+          likes?: number;
+          shares?: number;
+          comments?: number;
+          opens?: number;
+          unsubscribes?: number;
+          raw_data?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'content_metrics_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'content_metrics_schedule_id_fkey';
+            columns: ['schedule_id'];
+            isOneToOne: false;
+            referencedRelation: 'content_schedules';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1478,3 +1681,43 @@ export interface Database {
     };
   };
 }
+
+// ---------------------------------------------------------------------------
+// Convenience Row type aliases — use these instead of inline ad-hoc interfaces
+// ---------------------------------------------------------------------------
+type Tables = Database['public']['Tables'];
+
+export type UserRow = Tables['users']['Row'];
+export type WorkspaceRow = Tables['workspaces']['Row'];
+export type WorkspaceMemberRow = Tables['workspace_members']['Row'];
+export type AgentRow = Tables['agents']['Row'];
+export type AgentAssignmentRow = Tables['agent_assignments']['Row'];
+export type PipelineRow = Tables['pipelines']['Row'];
+export type PipelineExecutionRow = Tables['pipeline_executions']['Row'];
+export type PipelineStepRow = Tables['pipeline_steps']['Row'];
+export type McpConnectionRow = Tables['mcp_connections']['Row'];
+export type SecretVaultRow = Tables['secret_vault']['Row'];
+export type CreditRow = Tables['credits']['Row'];
+export type BusinessPlanRow = Tables['business_plans']['Row'];
+export type TenderSubmissionRow = Tables['tender_submissions']['Row'];
+export type DocumentReviewRow = Tables['document_reviews']['Row'];
+export type HealingIncidentRow = Tables['healing_incidents']['Row'];
+export type SubscriptionPlanRow = Tables['subscription_plans']['Row'];
+export type WorkspaceSubscriptionRow = Tables['workspace_subscriptions']['Row'];
+export type BudgetAlertRow = Tables['budget_alerts']['Row'];
+export type PersonaDebateRow = Tables['persona_debates']['Row'];
+export type DebateMessageRow = Tables['debate_messages']['Row'];
+export type AgentMetricRow = Tables['agent_metrics']['Row'];
+export type CreditLimitRow = Tables['credit_limits']['Row'];
+export type AuditLogRow = Tables['audit_logs']['Row'];
+export type NewsletterSubscriberRow = Tables['newsletter_subscribers']['Row'];
+export type ContentScheduleRow = Tables['content_schedules']['Row'];
+export type ContentMetricRow = Tables['content_metrics']['Row'];
+
+// Insert / Update helpers (use when needed)
+export type UserInsert = Tables['users']['Insert'];
+export type WorkspaceInsert = Tables['workspaces']['Insert'];
+export type McpConnectionInsert = Tables['mcp_connections']['Insert'];
+export type ContentScheduleInsert = Tables['content_schedules']['Insert'];
+export type NewsletterSubscriberInsert = Tables['newsletter_subscribers']['Insert'];
+export type ContentMetricInsert = Tables['content_metrics']['Insert'];

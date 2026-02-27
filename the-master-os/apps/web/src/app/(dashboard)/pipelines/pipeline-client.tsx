@@ -5,6 +5,7 @@ import { GitBranch } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useExecutionStore } from '@/stores/execution-store';
 import { useExecutionWS } from '@/hooks/use-execution-ws';
+import { createClient } from '@/lib/supabase/client';
 import { PipelineCard } from './pipeline-card';
 import { StartDialog } from './start-dialog';
 import { ExecutionPanel } from './execution-panel';
@@ -110,9 +111,11 @@ export function PipelineClient({
       setDialogOpen(false);
       setSelectedPipeline(null);
 
-      // Connect WebSocket for real-time updates
-      // Use a placeholder token; in production this would be the session token
-      connect(executionId, 'session-token');
+      // Connect WebSocket for real-time updates with Supabase session JWT
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? '';
+      connect(executionId, token);
     },
     [pipelines, executionStore, connect],
   );

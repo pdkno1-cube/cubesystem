@@ -28,7 +28,10 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from supabase._async.client import AsyncClient as SupabaseAsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,7 @@ def _current_week_period() -> tuple[date, date]:
 
 
 async def record_agent_metric(
-    supabase: Any,
+    supabase: SupabaseAsyncClient,
     *,
     agent_id: str,
     workspace_id: str,

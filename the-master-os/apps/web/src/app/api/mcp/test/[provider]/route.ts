@@ -123,6 +123,9 @@ const PING_HANDLERS: Record<string, (secret: string) => Promise<{ ok: boolean; m
   firecrawl: pingFirecrawl,
 };
 
+// Providers that exist in the DB enum but are not yet implemented
+const UNIMPLEMENTED_PROVIDERS: ReadonlySet<string> = new Set(['figma']);
+
 // ─── POST /api/mcp/test/[provider] ──────────────────────────────
 
 export async function POST(
@@ -138,6 +141,19 @@ export async function POST(
       { error: { code: 'MISSING_PARAM', message: 'workspace_id required' } },
       { status: 400 },
     );
+  }
+
+  // Guard: providers that exist in DB enum but have no implementation yet
+  if (UNIMPLEMENTED_PROVIDERS.has(provider)) {
+    const result: TestResultData = {
+      healthy: false,
+      provider,
+      health_status: 'unknown',
+      tested_at: new Date().toISOString(),
+      response_time_ms: 0,
+      note: `${provider.charAt(0).toUpperCase() + provider.slice(1)} integration not yet implemented`,
+    };
+    return NextResponse.json({ data: result });
   }
 
   // 1) FastAPI가 있으면 upstream으로 프록시

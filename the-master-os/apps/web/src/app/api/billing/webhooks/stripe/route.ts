@@ -1,19 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
+import Stripe from "stripe";
 import * as Sentry from "@sentry/nextjs";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // ---------------------------------------------------------------------------
-// Types
+// Stripe client (lazy-initialised — only when STRIPE_SECRET_KEY is set)
 // ---------------------------------------------------------------------------
 
-/** Minimal Stripe event shape — no SDK dependency */
-interface StripeEvent {
-  id: string;
-  type: string;
-  data: {
-    object: Record<string, unknown>;
-  };
+function getStripeClient(): Stripe | null {
+  const secretKey = process.env["STRIPE_SECRET_KEY"];
+  if (!secretKey) {
+    return null;
+  }
+  return new Stripe(secretKey, { apiVersion: "2026-02-25.clover" });
 }
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface WebhookResponse {
   received: boolean;
@@ -21,50 +25,6 @@ interface WebhookResponse {
 
 interface WebhookErrorResponse {
   error: string;
-}
-
-// ---------------------------------------------------------------------------
-// Stripe webhook secret
-// ---------------------------------------------------------------------------
-
-function getWebhookSecret(): string | null {
-  return process.env["STRIPE_WEBHOOK_SECRET"] ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// Signature verification
-// ---------------------------------------------------------------------------
-
-/**
- * Verifies the Stripe webhook signature using the raw body.
- *
- * TODO: Stripe 연동 시 아래로 교체
- * import Stripe from 'stripe';
- * const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-12-18.acacia' });
- * const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
- */
-async function verifyAndParseEvent(
-  rawBody: string,
-  _signature: string,
-  _webhookSecret: string,
-): Promise<StripeEvent | null> {
-  // TODO: 실제 서명 검증은 Stripe SDK의 constructEvent를 사용
-  // 현재는 JSON 파싱만 수행 (시뮬레이션 / 테스트 용도)
-  try {
-    const parsed: unknown = JSON.parse(rawBody);
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "id" in parsed &&
-      "type" in parsed &&
-      "data" in parsed
-    ) {
-      return parsed as StripeEvent;
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +206,7 @@ async function handlePaymentFailed(
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<WebhookResponse | WebhookErrorResponse>> {
-  const webhookSecret = getWebhookSecret();
+  const webhookSecret = process.env["STRIPE_WEBHOOK_SECRET"];
 
   // No webhook secret configured — skip processing
   if (!webhookSecret) {
@@ -260,16 +220,58 @@ export async function POST(
     const rawBody = await request.text();
     const signature = request.headers.get("stripe-signature") ?? "";
 
-    const event = await verifyAndParseEvent(rawBody, signature, webhookSecret);
+    // ---------------------------------------------------------------
+    // Verify webhook signature using Stripe SDK
+    // ---------------------------------------------------------------
+    const stripe = getStripeClient();
 
-    if (!event) {
-      return NextResponse.json(
-        { error: "Invalid webhook payload or signature verification failed." },
-        { status: 400 },
+    let event: Stripe.Event;
+
+    if (stripe) {
+      // LIVE mode — cryptographic signature verification
+      try {
+        event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+      } catch (verifyErr) {
+        Sentry.captureException(verifyErr, {
+          tags: { context: "stripe.webhook.verify" },
+        });
+        return NextResponse.json(
+          { error: "Invalid signature" },
+          { status: 400 },
+        );
+      }
+    } else {
+      // DEV fallback — STRIPE_SECRET_KEY not set but STRIPE_WEBHOOK_SECRET is.
+      // Parse JSON but log a warning. This path should not exist in production.
+      Sentry.captureMessage(
+        "Stripe webhook received without STRIPE_SECRET_KEY — signature verification skipped",
+        { level: "warning" },
       );
+      try {
+        const parsed: unknown = JSON.parse(rawBody);
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          "id" in parsed &&
+          "type" in parsed &&
+          "data" in parsed
+        ) {
+          event = parsed as Stripe.Event;
+        } else {
+          return NextResponse.json(
+            { error: "Invalid webhook payload." },
+            { status: 400 },
+          );
+        }
+      } catch {
+        return NextResponse.json(
+          { error: "Failed to parse webhook body." },
+          { status: 400 },
+        );
+      }
     }
 
-    const eventData = event.data.object;
+    const eventData = event.data.object as unknown as Record<string, unknown>;
 
     // Route to event-specific handler
     switch (event.type) {

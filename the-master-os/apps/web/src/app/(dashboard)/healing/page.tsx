@@ -49,7 +49,7 @@ export default async function HealingPage() {
           .order('detected_at', { ascending: false })
           .limit(50);
 
-        incidents = (incidentsData ?? []) as unknown as HealingIncident[];
+        incidents = (incidentsData ?? []) as HealingIncident[];
 
         // Compute stats server-side
         const rows = incidents;

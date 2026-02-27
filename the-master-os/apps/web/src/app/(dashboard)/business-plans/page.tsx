@@ -54,7 +54,7 @@ export default async function BusinessPlansPage() {
           .order('created_at', { ascending: false })
           .limit(50);
 
-        plans = (plansData ?? []) as unknown as BusinessPlanSummary[];
+        plans = (plansData ?? []) as BusinessPlanSummary[];
       }
     }
   } catch (error) {

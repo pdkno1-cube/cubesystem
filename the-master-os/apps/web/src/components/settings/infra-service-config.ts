@@ -8,10 +8,12 @@ export type ServiceCategory = 'hosting' | 'database' | 'ai' | 'email' | 'monitor
 
 export interface UsageMetric {
   label: string;
-  current: number;
+  current: number | null;
   limit: number;
   unit: string;
   usagePercent: number;
+  /** Indicates whether the value came from a live query or an env var fallback */
+  source?: 'live' | 'env' | 'not_configured';
 }
 
 export interface UpgradePath {
@@ -118,12 +120,18 @@ export function calcStatus(usagePercent: number): ServiceStatus {
   return 'critical';
 }
 
-/** 여러 메트릭 중 가장 높은 상태 반환 */
+/** Check if a metric value is configured (not null) */
+export function isMetricConfigured(metric: UsageMetric): boolean {
+  return metric.current !== null && metric.source !== 'not_configured';
+}
+
+/** 여러 메트릭 중 가장 높은 상태 반환 (null current는 건너뜀) */
 export function worstStatus(metrics: UsageMetric[]): ServiceStatus {
   if (metrics.length === 0) {return 'stable';}
   const order: ServiceStatus[] = ['stable', 'good', 'caution', 'warning', 'critical'];
   let worst: ServiceStatus = 'stable';
   for (const m of metrics) {
+    if (m.current === null || m.source === 'not_configured') {continue;}
     const s = calcStatus(m.usagePercent);
     if (order.indexOf(s) > order.indexOf(worst)) {worst = s;}
   }

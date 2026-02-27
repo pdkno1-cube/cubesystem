@@ -47,7 +47,7 @@ export default async function MarketingPage() {
           .order('scheduled_at', { ascending: true })
           .limit(200);
 
-        schedules = (schedulesData ?? []) as unknown as ScheduleItem[];
+        schedules = (schedulesData ?? []) as ScheduleItem[];
       }
     }
   } catch (error) {

@@ -75,25 +75,7 @@ export default async function WorkspacesPage() {
     }
   } catch (error) {
     Sentry.captureException(error, { tags: { context: 'workspaces.page.load' } });
-    // Supabase 미연결 시 mock 데이터
-    initialWorkspaces = [
-      {
-        id: 'ws-001', name: '엉클로지텍', slug: 'uncle-logitech', description: '물류/유통 자동화 법인',
-        icon_url: null, owner_id: 'user-001', status: 'active', is_active: true,
-        settings: { category: 'logistics', icon: 'Truck' },
-        created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z', deleted_at: null,
-        agent_count: 3, active_pipeline_count: 1, credit_balance: 28500, member_count: 2,
-        category: 'logistics', icon: 'Truck',
-      },
-      {
-        id: 'ws-002', name: '디어버블', slug: 'dear-bubble', description: 'F&B 브랜드 마케팅',
-        icon_url: null, owner_id: 'user-001', status: 'active', is_active: true,
-        settings: { category: 'fnb', icon: 'UtensilsCrossed' },
-        created_at: '2026-03-02T00:00:00Z', updated_at: '2026-03-02T00:00:00Z', deleted_at: null,
-        agent_count: 2, active_pipeline_count: 0, credit_balance: 14200, member_count: 1,
-        category: 'fnb', icon: 'UtensilsCrossed',
-      },
-    ];
+    initialWorkspaces = [];
   }
 
   return <WorkspaceListClient initialWorkspaces={initialWorkspaces} />;

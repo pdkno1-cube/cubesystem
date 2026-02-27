@@ -57,7 +57,7 @@ export async function GET(
       return apiError('NOT_FOUND', `Business plan '${params.id}' not found`, 404);
     }
 
-    return NextResponse.json({ data: data as unknown as BusinessPlanRow });
+    return NextResponse.json({ data: data as BusinessPlanRow });
   } catch (error) {
     return handleApiError(error, 'business-plans.[id].GET');
   }
@@ -103,7 +103,7 @@ export async function PATCH(
       return apiError('NOT_FOUND', `Business plan '${params.id}' not found`, 404);
     }
 
-    return NextResponse.json({ data: data as unknown as BusinessPlanRow });
+    return NextResponse.json({ data: data as BusinessPlanRow });
   } catch (error) {
     return handleApiError(error, 'business-plans.[id].PATCH');
   }

@@ -74,7 +74,7 @@ export default async function DebatesPage() {
           .order('created_at', { ascending: false })
           .limit(50);
 
-        const debateRows = (debatesData ?? []) as unknown as DebateRow[];
+        const debateRows = (debatesData ?? []) as DebateRow[];
 
         // ── Batch: fetch ALL debate_messages in one query ──────────────
         const debateIds = debateRows.map((d) => d.id);
@@ -85,7 +85,7 @@ export default async function DebatesPage() {
             .select('debate_id, agent_id')
             .in('debate_id', debateIds);
 
-          const messageRows = (allMessages ?? []) as unknown as Array<{
+          const messageRows = (allMessages ?? []) as Array<{
             debate_id: string;
             agent_id: string;
           }>;

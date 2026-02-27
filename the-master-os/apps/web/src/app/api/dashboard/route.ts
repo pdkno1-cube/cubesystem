@@ -218,14 +218,15 @@ export async function GET() {
     ]);
 
     // Process workspace data
-    const workspaces = (workspacesResult.data ?? []) as unknown as WorkspaceRow[];
-    const agents = (agentsResult.data ?? []) as unknown as AgentBasic[];
-    const assignments = (assignmentsResult.data ?? []) as unknown as AssignmentBasic[];
+    const workspaces = (workspacesResult.data ?? []) as WorkspaceRow[];
+    const agents = (agentsResult.data ?? []) as AgentBasic[];
+    const assignments = (assignmentsResult.data ?? []) as AssignmentBasic[];
+    // Relations inferred as arrays by PostgREST parser, needs double cast
     const pipelineExecs = (pipelineExecsResult.data ?? []) as unknown as PipelineExecRow[];
-    const creditTransactions = (creditsResult.data ?? []) as unknown as CreditRow[];
-    const auditLogs = (auditLogsResult.data ?? []) as unknown as AuditLogRow[];
-    const mcpConnections = (mcpConnectionsResult.data ?? []) as unknown as McpConnectionRow[];
-    const contentSchedules = (contentSchedulesResult.data ?? []) as unknown as ContentScheduleRow[];
+    const creditTransactions = (creditsResult.data ?? []) as CreditRow[];
+    const auditLogs = (auditLogsResult.data ?? []) as AuditLogRow[];
+    const mcpConnections = (mcpConnectionsResult.data ?? []) as McpConnectionRow[];
+    const contentSchedules = (contentSchedulesResult.data ?? []) as ContentScheduleRow[];
     const todayPipelineCount = todayPipelineCountResult.count ?? 0;
 
     // Credit balances per workspace

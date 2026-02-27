@@ -42,6 +42,8 @@ def _get_sync_supabase() -> Any:
 
 # ---------------------------------------------------------------------------
 # Task: execute_pipeline_async
+# STUB: Celery pipeline execution requires Redis broker. Currently using
+# sync PipelineEngine.run() fallback.
 # ---------------------------------------------------------------------------
 
 def execute_pipeline_async(
@@ -50,6 +52,11 @@ def execute_pipeline_async(
     input_data: dict[str, Any],
 ) -> dict[str, Any]:
     """Execute a pipeline asynchronously.
+
+    **STUB**: This task only marks the execution as "queued" — it does NOT
+    run pipeline nodes.  Full execution requires a Redis broker and the
+    async ``PipelineEngine``.  Without Redis, the caller should fall back
+    to ``PipelineEngine.run()`` directly.
 
     This task is registered with Celery when available.  When Celery is not
     configured, it can be called directly as a regular function.
@@ -62,16 +69,17 @@ def execute_pipeline_async(
     Returns:
         Dict with execution result metadata.
     """
-    logger.info(
-        "execute_pipeline_async: starting pipeline=%s workspace=%s",
+    logger.warning(
+        "execute_pipeline_async: STUB — pipeline=%s queued but NOT executed. "
+        "Celery pipeline execution requires a Redis broker. "
+        "Use sync PipelineEngine.run() as fallback.",
         pipeline_id,
-        workspace_id,
     )
 
     try:
         sb = _get_sync_supabase()
 
-        # Mark pipeline execution as running
+        # Mark pipeline execution as running (status bookkeeping only)
         sb.table("pipeline_executions").update({
             "status": "running",
             "started_at": datetime.now(tz=timezone.utc).isoformat(),
@@ -79,16 +87,10 @@ def execute_pipeline_async(
             "workspace_id", workspace_id
         ).eq("status", "pending").execute()
 
-        # NOTE: Full pipeline execution logic lives in PipelineEngine (async).
-        # In a Celery context, we would use asyncio.run() to bridge, or
-        # implement a sync execution path.  For now, this marks the
-        # infrastructure plumbing — actual node execution will be wired
-        # when the async bridge is implemented.
-
-        logger.info(
-            "execute_pipeline_async: pipeline=%s queued for execution",
-            pipeline_id,
-        )
+        # STUB: Celery pipeline execution requires Redis broker. Currently
+        # using sync PipelineEngine.run() fallback. Full node execution is
+        # NOT wired here — the orchestrate router invokes PipelineEngine
+        # directly until Redis infrastructure is provisioned.
 
         return {
             "pipeline_id": pipeline_id,
@@ -156,7 +158,7 @@ def send_notification(
             # Use synchronous approach — Celery tasks are sync
             import asyncio
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 registry.execute_tool(
                     mcp_name="slack",
                     workspace_id=workspace_id,
@@ -235,7 +237,7 @@ def run_health_check() -> dict[str, Any]:
             provider: str = str(conn["provider"])
 
             try:
-                is_healthy: bool = asyncio.get_event_loop().run_until_complete(
+                is_healthy: bool = asyncio.run(
                     registry.health_check(provider, workspace_id)
                 )
                 health_status = "healthy" if is_healthy else "down"
@@ -310,7 +312,7 @@ def run_vault_rotation_task() -> dict[str, Any]:
 
             await run_vault_rotation(supabase=supabase_async)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.run(_run())
 
         return {"status": "completed"}
 

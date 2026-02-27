@@ -18,9 +18,12 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.security.vault import SecretVault, VaultError
+
+if TYPE_CHECKING:
+    from supabase._async.client import AsyncClient as SupabaseAsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,7 @@ def _generate_api_key() -> str:
     return f"tmos_{uuid.uuid4().hex}"
 
 
-async def run_vault_rotation(supabase: Any) -> None:
+async def run_vault_rotation(supabase: SupabaseAsyncClient) -> None:
     """Main rotation job entry point.
 
     Args:
@@ -122,7 +125,7 @@ def _should_rotate(secret: dict[str, Any], now: datetime) -> bool:
 
 
 async def _rotate_single_secret(
-    supabase: Any,
+    supabase: SupabaseAsyncClient,
     secret: dict[str, Any],
     now: datetime,
 ) -> None:
@@ -195,13 +198,13 @@ async def _rotate_single_secret(
 
 
 async def _write_audit_log(
-    supabase: Any,
+    supabase: SupabaseAsyncClient,
     *,
     workspace_id: str,
     action: str,
     resource_type: str,
     resource_id: str,
-    details: dict[str, Any],
+    details: dict[str, object],
 ) -> None:
     """Write an audit log entry for the rotation event."""
     try:

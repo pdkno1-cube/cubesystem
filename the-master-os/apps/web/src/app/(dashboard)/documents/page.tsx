@@ -63,7 +63,7 @@ export default async function DocumentsPage() {
           .order('created_at', { ascending: false })
           .limit(100);
 
-        reviews = (reviewsData ?? []) as unknown as DocumentReview[];
+        reviews = (reviewsData ?? []) as DocumentReview[];
       }
     }
   } catch (error) {

@@ -14,6 +14,7 @@ Expected server API (local PaddleOCR server):
 from __future__ import annotations
 
 import logging
+import os
 
 import httpx
 
@@ -21,7 +22,7 @@ from app.mcp.base import MCPConnectionError, MCPExecutionError
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BASE_URL = "http://localhost:8866"
+_DEFAULT_BASE_URL = os.getenv("PADDLEOCR_URL", "http://localhost:8866")
 _DEFAULT_TIMEOUT = 120.0  # OCR can be slow for large documents
 _SUPPORTED_ACTIONS = frozenset({"extract_text", "extract_structured"})
 

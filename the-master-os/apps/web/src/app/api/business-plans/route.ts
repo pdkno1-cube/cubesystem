@@ -72,51 +72,6 @@ interface FastApiGenerateResponse {
   meta: Record<string, unknown>;
 }
 
-// ── Mock sections generator (fallback) ────────────────────────────────────
-
-function generateMockSections(body: CreatePlanBody): Record<string, unknown> {
-  return {
-    executive_summary: `${body.company_name}은(는) ${body.industry} 산업에서 ${body.target_market}을(를) 대상으로 혁신적인 솔루션을 제공합니다. ${body.company_description ?? ''}`,
-    problem: `${body.target_market} 시장에서 기존 솔루션은 비효율적이며, 사용자 경험이 부족합니다. 현재 시장의 주요 문제점은 높은 비용, 복잡한 프로세스, 낮은 접근성입니다.`,
-    solution: `${body.company_name}의 솔루션은 AI 기반 자동화와 직관적인 UX를 통해 기존 문제를 해결합니다. 핵심 차별점은 10배 빠른 처리 속도, 50% 비용 절감, 원클릭 자동화입니다.`,
-    market_analysis: {
-      tam: body.tam_value ?? 0,
-      sam: body.sam_value ?? 0,
-      som: body.som_value ?? 0,
-      description: `${body.industry} 산업의 전체 시장(TAM)은 ${formatKRW(body.tam_value ?? 0)}이며, 서비스 가능 시장(SAM)은 ${formatKRW(body.sam_value ?? 0)}, 획득 가능 시장(SOM)은 ${formatKRW(body.som_value ?? 0)}입니다.`,
-    },
-    business_model: `B2B SaaS 구독 모델을 기반으로, 월간/연간 구독료와 사용량 기반 과금을 병행합니다. 평균 고객 단가(ARPU)는 월 50만원이며, 고객 생애 가치(LTV)는 1,800만원입니다.`,
-    financial_projection: {
-      years: ['1년차', '2년차', '3년차'],
-      revenue: [500000000, 2000000000, 5000000000],
-      cost: [800000000, 1500000000, 2500000000],
-      profit: [-300000000, 500000000, 2500000000],
-    },
-    team: `창업자: CEO (${body.industry} 10년 경력)\nCTO: 기술 총괄 (AI/ML 전문가)\nCMO: 마케팅 총괄 (B2B SaaS 성장 전문)\nCOO: 운영 총괄 (스타트업 스케일업 경험)`,
-    timeline: {
-      milestones: [
-        { quarter: 'Q1', label: 'MVP 출시 및 초기 고객 확보' },
-        { quarter: 'Q2', label: '제품 고도화 및 시리즈A 투자 유치' },
-        { quarter: 'Q3', label: '팀 확장 및 마케팅 본격화' },
-        { quarter: 'Q4', label: '해외 시장 진출 준비' },
-      ],
-    },
-  };
-}
-
-function formatKRW(value: number): string {
-  if (value >= 1_000_000_000_000) {
-    return `${(value / 1_000_000_000_000).toFixed(1)}조원`;
-  }
-  if (value >= 100_000_000) {
-    return `${(value / 100_000_000).toFixed(0)}억원`;
-  }
-  if (value >= 10_000) {
-    return `${(value / 10_000).toFixed(0)}만원`;
-  }
-  return `${value}원`;
-}
-
 // ── FastAPI LLM 호출 ──────────────────────────────────────────────────────
 
 async function generateSectionsViaLLM(
@@ -248,34 +203,46 @@ export async function POST(
 
     // 2) Try FastAPI LLM generation
     const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
-    let sections: Record<string, unknown>;
-    let finalStatus: string = 'completed';
-    let source: string = 'mock';
 
-    if (FASTAPI_URL) {
-      // Get session token for FastAPI auth
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token ?? '';
-
-      try {
-        const result = await generateSectionsViaLLM(body, accessToken, FASTAPI_URL);
-        sections = result.sections;
-        source = result.source;
-        finalStatus = 'completed';
-      } catch (llmError) {
-        Sentry.captureException(llmError, {
-          tags: { context: 'business-plans.POST.llm' },
-        });
-        // Fallback to mock on LLM failure
-        sections = generateMockSections(body);
-        finalStatus = 'completed';
-        source = 'mock-fallback';
-      }
-    } else {
-      // No FastAPI URL — use mock
-      sections = generateMockSections(body);
-      source = 'mock';
+    if (!FASTAPI_URL) {
+      await supabase
+        .from('business_plans')
+        .update({ status: 'failed' })
+        .eq('id', planId);
+      return apiError(
+        'SERVICE_UNAVAILABLE',
+        'LLM 생성 서비스(FASTAPI_URL)가 구성되지 않았습니다. 관리자에게 문의하세요.',
+        503,
+      );
     }
+
+    // Get session token for FastAPI auth
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token ?? '';
+
+    let sections: Record<string, unknown>;
+    let source: string;
+
+    try {
+      const result = await generateSectionsViaLLM(body, accessToken, FASTAPI_URL);
+      sections = result.sections;
+      source = result.source;
+    } catch (llmError) {
+      Sentry.captureException(llmError, {
+        tags: { context: 'business-plans.POST.llm' },
+      });
+      await supabase
+        .from('business_plans')
+        .update({ status: 'failed' })
+        .eq('id', planId);
+      return apiError(
+        'SERVICE_UNAVAILABLE',
+        '사업계획서 생성에 실패했습니다. LLM 서비스가 일시적으로 사용 불가합니다. 잠시 후 다시 시도해주세요.',
+        503,
+      );
+    }
+
+    const finalStatus = 'completed';
 
     // 3) Update with generated sections
     const { data: updatedRow, error: updateError } = await supabase

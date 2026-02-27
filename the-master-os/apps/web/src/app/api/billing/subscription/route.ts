@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import Stripe from "stripe";
 import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { apiError, handleApiError, type ApiErrorBody } from "@/lib/api-response";
@@ -59,6 +60,10 @@ function getStripeSecretKey(): string | null {
 
 function getBillingMode(): BillingMode {
   return getStripeSecretKey() ? "live" : "simulated";
+}
+
+function getStripeClient(secretKey: string): Stripe {
+  return new Stripe(secretKey, { apiVersion: "2026-02-25.clover" });
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +157,7 @@ export async function GET(
 // ---------------------------------------------------------------------------
 // POST /api/billing/subscription — 구독 생성/변경
 // ---------------------------------------------------------------------------
-// - STRIPE_SECRET_KEY 있으면: Stripe Checkout Session 생성 (TODO)
+// - STRIPE_SECRET_KEY 있으면: Stripe Checkout Session 생성
 // - 없으면: 시뮬레이션 모드 (즉시 활성화)
 // ---------------------------------------------------------------------------
 
@@ -198,60 +203,82 @@ export async function POST(
     // LIVE MODE — Stripe Checkout Session
     // -----------------------------------------------------------------
     if (stripeKey) {
-      // TODO: Stripe 연동 시 아래 주석을 해제하고 구현
-      //
-      // import Stripe from 'stripe';
-      // const stripe = new Stripe(stripeKey, { apiVersion: '2024-12-18.acacia' });
-      //
-      // 1) 기존 stripe_customer_id 조회 또는 신규 고객 생성
-      // const { data: existingSub } = await supabase
-      //   .from("workspace_subscriptions")
-      //   .select("stripe_customer_id")
-      //   .eq("workspace_id", body.workspace_id)
-      //   .maybeSingle();
-      //
-      // let customerId = existingSub?.stripe_customer_id as string | null;
-      // if (!customerId) {
-      //   const customer = await stripe.customers.create({
-      //     email: user.email,
-      //     metadata: { workspace_id: body.workspace_id, user_id: user.id },
-      //   });
-      //   customerId = customer.id;
-      // }
-      //
-      // 2) Checkout Session 생성
-      // const session = await stripe.checkout.sessions.create({
-      //   customer: customerId,
-      //   mode: 'subscription',
-      //   line_items: [{ price: plan.stripe_price_id as string, quantity: 1 }],
-      //   success_url: `${request.nextUrl.origin}/billing?checkout=success`,
-      //   cancel_url: `${request.nextUrl.origin}/billing?checkout=cancel`,
-      //   metadata: { workspace_id: body.workspace_id, plan_slug: body.plan_slug },
-      // });
-      //
-      // 3) customer_id를 미리 저장 (webhook에서 subscription 확정)
-      // await supabase
-      //   .from("workspace_subscriptions")
-      //   .upsert({
-      //     workspace_id: body.workspace_id,
-      //     plan_id: plan.id as string,
-      //     stripe_customer_id: customerId,
-      //     status: 'trialing',
-      //   }, { onConflict: "workspace_id" });
-      //
-      // return NextResponse.json({
-      //   message: "Stripe Checkout 페이지로 이동합니다.",
-      //   checkout_url: session.url,
-      //   subscription: { ... },
-      //   mode: "live",
-      // });
+      const stripe = getStripeClient(stripeKey);
 
-      // Stripe SDK 미설치 상태 — 키는 있지만 SDK가 없으므로 에러 반환
-      return apiError(
-        "NOT_IMPLEMENTED",
-        "Stripe SDK가 설치되지 않았습니다. npm install stripe 후 live 모드를 사용해주세요.",
-        501,
-      );
+      // 1) 기존 stripe_customer_id 조회 또는 신규 고객 생성
+      const { data: existingSub } = await supabase
+        .from("workspace_subscriptions")
+        .select("stripe_customer_id")
+        .eq("workspace_id", body.workspace_id)
+        .maybeSingle();
+
+      let customerId = (existingSub?.stripe_customer_id as string | null) ?? null;
+
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          metadata: { workspace_id: body.workspace_id, user_id: user.id },
+        });
+        customerId = customer.id;
+      }
+
+      // 2) Checkout Session 생성
+      const stripePriceId = plan.stripe_price_id as string | null;
+
+      if (!stripePriceId) {
+        return apiError(
+          "CONFIGURATION_ERROR",
+          "해당 플랜에 Stripe Price ID가 설정되지 않았습니다.",
+          422,
+        );
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: "subscription",
+        line_items: [{ price: stripePriceId, quantity: 1 }],
+        success_url: `${request.nextUrl.origin}/billing?checkout=success`,
+        cancel_url: `${request.nextUrl.origin}/billing?checkout=cancel`,
+        metadata: { workspace_id: body.workspace_id, plan_slug: body.plan_slug },
+      });
+
+      // 3) customer_id를 미리 저장 (webhook에서 subscription 확정)
+      const { data: pendingSub, error: upsertError } = await supabase
+        .from("workspace_subscriptions")
+        .upsert(
+          {
+            workspace_id: body.workspace_id,
+            plan_id: plan.id as string,
+            stripe_customer_id: customerId,
+            status: "trialing" as const,
+          },
+          { onConflict: "workspace_id" },
+        )
+        .select("id, workspace_id, plan_id, stripe_customer_id, stripe_subscription_id, status, current_period_start, current_period_end, created_at, updated_at")
+        .single();
+
+      if (upsertError || !pendingSub) {
+        Sentry.captureException(upsertError, {
+          tags: { context: "billing.subscription.POST.live" },
+        });
+        return apiError("DB_ERROR", `구독 생성 실패: ${upsertError?.message ?? "unknown"}`, 500);
+      }
+
+      const planJoin: PlanJoin = {
+        name: plan.name as string,
+        slug: plan.slug as string,
+        credits_per_month: Number(plan.credits_per_month),
+        price_usd: Number(plan.price_usd),
+      };
+
+      const subscription = toSubscription(pendingSub as unknown as Record<string, unknown>, planJoin);
+
+      return NextResponse.json({
+        message: "Stripe Checkout 페이지로 이동합니다.",
+        checkout_url: session.url,
+        subscription,
+        mode: "live",
+      });
     }
 
     // -----------------------------------------------------------------
@@ -306,7 +333,7 @@ export async function POST(
 // ---------------------------------------------------------------------------
 // DELETE /api/billing/subscription — 구독 취소
 // ---------------------------------------------------------------------------
-// - LIVE: Stripe API로 subscription cancel (TODO)
+// - LIVE: Stripe API로 subscription cancel_at_period_end
 // - SIMULATED: DB 상태만 변경
 // ---------------------------------------------------------------------------
 
@@ -333,33 +360,55 @@ export async function DELETE(
     }
 
     // -----------------------------------------------------------------
-    // LIVE MODE — Stripe subscription cancel
+    // LIVE MODE — Stripe subscription cancel at period end
     // -----------------------------------------------------------------
     if (stripeKey) {
-      // TODO: Stripe 연동 시 아래 주석을 해제하고 구현
-      //
-      // import Stripe from 'stripe';
-      // const stripe = new Stripe(stripeKey, { apiVersion: '2024-12-18.acacia' });
-      //
-      // const { data: existingSub } = await supabase
-      //   .from("workspace_subscriptions")
-      //   .select("stripe_subscription_id")
-      //   .eq("workspace_id", workspaceId)
-      //   .single();
-      //
-      // if (existingSub?.stripe_subscription_id) {
-      //   await stripe.subscriptions.update(existingSub.stripe_subscription_id as string, {
-      //     cancel_at_period_end: true,
-      //   });
-      // }
-      //
-      // DB 업데이트는 webhook (customer.subscription.updated) 에서 처리
+      const stripe = getStripeClient(stripeKey);
 
-      return apiError(
-        "NOT_IMPLEMENTED",
-        "Stripe SDK가 설치되지 않았습니다. npm install stripe 후 live 모드를 사용해주세요.",
-        501,
+      const { data: existingSub, error: fetchError } = await supabase
+        .from("workspace_subscriptions")
+        .select(`
+          id, workspace_id, plan_id,
+          stripe_customer_id, stripe_subscription_id,
+          status, current_period_start, current_period_end,
+          created_at, updated_at,
+          subscription_plans (name, slug, credits_per_month, price_usd)
+        `)
+        .eq("workspace_id", workspaceId)
+        .single();
+
+      if (fetchError || !existingSub) {
+        Sentry.captureException(fetchError, { tags: { context: "billing.subscription.DELETE.live" } });
+        return apiError("NOT_FOUND", "활성 구독이 없습니다.", 404);
+      }
+
+      const stripeSubId = existingSub.stripe_subscription_id as string | null;
+
+      if (stripeSubId && !stripeSubId.startsWith("sub_sim_")) {
+        // Cancel at period end — user keeps access until end of billing cycle
+        await stripe.subscriptions.update(stripeSubId, {
+          cancel_at_period_end: true,
+        });
+        // DB update will happen via webhook (customer.subscription.updated)
+      } else {
+        // No real Stripe subscription — update DB directly
+        await supabase
+          .from("workspace_subscriptions")
+          .update({ status: "cancelled" })
+          .eq("workspace_id", workspaceId);
+      }
+
+      const plan = existingSub.subscription_plans as unknown as PlanJoin | null;
+      const subscription = toSubscription(
+        { ...existingSub as unknown as Record<string, unknown>, status: "cancelled" },
+        plan,
       );
+
+      return NextResponse.json({
+        message: "구독 취소가 요청되었습니다. 현재 기간 종료까지 이용 가능합니다.",
+        subscription,
+        mode: "live",
+      });
     }
 
     // -----------------------------------------------------------------

@@ -9,14 +9,17 @@ closures), and returns a compiled graph ready for ``ainvoke()``.
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from langgraph.graph import END, StateGraph
 
 from app.pipeline.node_handlers import NODE_TYPE_HANDLERS
 from app.pipeline.state import PipelineState
+
+# Type alias for async node handler functions
+NodeHandlerFn = Callable[..., Awaitable[PipelineState]]
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -166,11 +169,11 @@ class PipelineGraphBuilder:
 
     def _create_node_closure(
         self,
-        handler_fn: Any,
+        handler_fn: NodeHandlerFn,
         node_config: dict[str, Any],
         node_type: str,
         deps: PipelineDependencies,
-    ) -> Any:
+    ) -> Callable[[PipelineState], Awaitable[PipelineState]]:
         """Build a closure wrapping *handler_fn* with injected dependencies.
 
         The returned async function has the LangGraph-expected signature:

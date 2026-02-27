@@ -46,7 +46,7 @@ export default async function BusinessPlanDetailPage({ params }: PageProps) {
         .single();
 
       if (data) {
-        plan = data as unknown as BusinessPlanDetail;
+        plan = data as BusinessPlanDetail;
       }
     }
   } catch (error) {

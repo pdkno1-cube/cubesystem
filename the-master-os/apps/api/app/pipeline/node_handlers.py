@@ -86,9 +86,9 @@ def _extract_mcp_name(label: str) -> str | None:
     return match.group(1).lower()
 
 
-def _copy_state(state: PipelineState, **overrides: Any) -> PipelineState:
+def _copy_state(state: PipelineState, **overrides: object) -> PipelineState:
     """Return a shallow copy of *state* with the given overrides applied."""
-    new: dict[str, Any] = dict(state)
+    new: dict[str, object] = dict(state)
     new.update(overrides)
     return PipelineState(**new)  # type: ignore[typeddict-item]
 

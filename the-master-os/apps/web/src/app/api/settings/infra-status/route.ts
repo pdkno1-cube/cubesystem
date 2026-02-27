@@ -11,7 +11,18 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// ─── env var 파싱 헬퍼 (없으면 기본값) ────────────────────────
+// ─── env var 파싱 헬퍼 ─────────────────────────────────────────
+/** Parse env var as number. Returns { value, source } — null value if env var is absent. */
+function envNumOrNull(key: string): { value: number | null; source: 'env' | 'not_configured' } {
+  const v = process.env[key];
+  if (!v || v.trim().length === 0) {
+    return { value: null, source: 'not_configured' };
+  }
+  const n = parseFloat(v);
+  return isNaN(n) ? { value: null, source: 'not_configured' } : { value: n, source: 'env' };
+}
+
+/** Legacy helper — returns number with fallback (still used for budget limits). */
 function envNum(key: string, fallback: number): number {
   const v = process.env[key];
   const n = v ? parseFloat(v) : NaN;
@@ -217,6 +228,43 @@ async function fetchVaultSecretStatus(
   }
 }
 
+// ─── Resend 이메일 발송 수 집계 (content_schedules) ───────────
+interface ResendEmailCount {
+  sentCount: number;
+  fetched: boolean;
+}
+
+async function fetchResendEmailCount(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<ResendEmailCount> {
+  const fallback: ResendEmailCount = { sentCount: 0, fetched: false };
+
+  try {
+    // 이번 달 시작일
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    // content_schedules에서 이번 달 newsletter 채널의 completed 건수 집계
+    const { count, error } = await supabase
+      .from('content_schedules')
+      .select('id', { count: 'exact', head: true })
+      .eq('channel', 'newsletter')
+      .eq('status', 'completed')
+      .gte('published_at', monthStart)
+      .is('deleted_at', null);
+
+    if (error) {
+      Sentry.captureException(error, { tags: { context: 'infra-status.resend-email-count' } });
+      return fallback;
+    }
+
+    return { sentCount: count ?? 0, fetched: true };
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'infra-status.resend-email-count' } });
+    return fallback;
+  }
+}
+
 // ─── 메인 핸들러 ─────────────────────────────────────────────
 export async function GET() {
   // 인증 확인
@@ -226,39 +274,59 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 비동기 데이터 3종 병렬 조회
-  const [supabaseLive, creditUsage, vaultStatus] = await Promise.all([
+  // 비동기 데이터 4종 병렬 조회
+  const [supabaseLive, creditUsage, vaultStatus, resendEmails] = await Promise.all([
     fetchSupabaseMetrics(),
     fetchProviderCreditUsage(supabase),
     fetchVaultSecretStatus(supabase),
+    fetchResendEmailCount(supabase),
   ]);
 
-  // ─── 사용량 값 (env var 주입 or 기본 mock) ─────────────────────
-  const vercelBandwidthGB    = envNum('VERCEL_BANDWIDTH_GB', 12.4);
-  const vercelFnInvocations  = envNum('VERCEL_FN_INVOCATIONS', 8200);
-  const railwayUsageUsd      = envNum('RAILWAY_CURRENT_USAGE_USD', 2.80);
-  const railwayMemoryMB      = envNum('RAILWAY_MEMORY_MB', 380);
+  // ─── 사용량 값 (live query > env var > null) ─────────────────────
+  const vercelBandwidth    = envNumOrNull('VERCEL_BANDWIDTH_GB');
+  const vercelFnInvoc      = envNumOrNull('VERCEL_FN_INVOCATIONS');
+  const railwayUsage       = envNumOrNull('RAILWAY_CURRENT_USAGE_USD');
+  const railwayMemory      = envNumOrNull('RAILWAY_MEMORY_MB');
 
-  // Supabase: 실데이터 > env var > 기본값 순서
-  const supabaseDbMB         = supabaseLive.fetched
-    ? supabaseLive.dbSizeMB
-    : envNum('SUPABASE_DB_MB', 47);
-  const supabaseMau          = envNum('SUPABASE_MAU', 3);
-  const supabaseBandwidthGB  = envNum('SUPABASE_BANDWIDTH_GB', 0.8);
+  // Supabase: 실데이터 > env var > null
+  const supabaseDbMB: { value: number | null; source: 'live' | 'env' | 'not_configured' } =
+    supabaseLive.fetched
+      ? { value: supabaseLive.dbSizeMB, source: 'live' }
+      : (() => {
+          const env = envNumOrNull('SUPABASE_DB_MB');
+          return { value: env.value, source: env.source };
+        })();
+  const supabaseMau        = envNumOrNull('SUPABASE_MAU');
+  const supabaseBandwidth  = envNumOrNull('SUPABASE_BANDWIDTH_GB');
 
-  // LLM: 크레딧 테이블 실데이터 > env var > 기본값
-  const anthropicSpendUsd    = creditUsage.fetched && creditUsage.anthropicCredits > 0
-    ? creditUsage.anthropicCredits
-    : envNum('ANTHROPIC_MONTHLY_SPEND_USD', 3.20);
+  // LLM: 크레딧 테이블 실데이터 > env var > null
+  const anthropicSpend: { value: number | null; source: 'live' | 'env' | 'not_configured' } =
+    creditUsage.fetched && creditUsage.anthropicCredits > 0
+      ? { value: creditUsage.anthropicCredits, source: 'live' }
+      : (() => {
+          const env = envNumOrNull('ANTHROPIC_MONTHLY_SPEND_USD');
+          return { value: env.value, source: env.source };
+        })();
   const anthropicBudgetUsd   = envNum('ANTHROPIC_MONTHLY_BUDGET_USD', 50);
-  const openaiSpendUsd       = creditUsage.fetched && creditUsage.openaiCredits > 0
-    ? creditUsage.openaiCredits
-    : envNum('OPENAI_MONTHLY_SPEND_USD', 0);
+  const openaiSpend: { value: number | null; source: 'live' | 'env' | 'not_configured' } =
+    creditUsage.fetched && creditUsage.openaiCredits > 0
+      ? { value: creditUsage.openaiCredits, source: 'live' }
+      : (() => {
+          const env = envNumOrNull('OPENAI_MONTHLY_SPEND_USD');
+          return { value: env.value, source: env.source };
+        })();
   const openaiBudgetUsd      = envNum('OPENAI_MONTHLY_BUDGET_USD', 20);
 
-  const resendEmailsSent     = envNum('RESEND_EMAILS_SENT', 127);
-  const sentryEventsUsed     = envNum('SENTRY_EVENTS_USED', 230);
-  const gdriveStorageGB      = envNum('GDRIVE_STORAGE_GB', 0.31);
+  // Resend: content_schedules 실데이터 > env var > null
+  const resendSent: { value: number | null; source: 'live' | 'env' | 'not_configured' } =
+    resendEmails.fetched
+      ? { value: resendEmails.sentCount, source: 'live' }
+      : (() => {
+          const env = envNumOrNull('RESEND_EMAILS_SENT');
+          return { value: env.value, source: env.source };
+        })();
+  const sentryEvents       = envNumOrNull('SENTRY_EVENTS_USED');
+  const gdriveStorage      = envNumOrNull('GDRIVE_STORAGE_GB');
 
   // ─── connection status 계산 ───────────────────────────────────
   const anthropicConnStatus  = envConnectionStatus('ANTHROPIC_API_KEY');
@@ -285,8 +353,15 @@ export async function GET() {
   const gdriveConnStatus = envConnectionStatus('GOOGLE_SERVICE_ACCOUNT_KEY');
 
   // ─── 메트릭 빌더 ───────────────────────────────────────────────
-  function metric(label: string, current: number, limit: number, unit: string): UsageMetric {
-    return { label, current, limit, unit, usagePercent: Math.min(Math.round((current / limit) * 100), 100) };
+  function metric(
+    label: string,
+    current: number | null,
+    limit: number,
+    unit: string,
+    source: 'live' | 'env' | 'not_configured' = 'live',
+  ): UsageMetric {
+    const pct = current !== null ? Math.min(Math.round((current / limit) * 100), 100) : 0;
+    return { label, current, limit, unit, usagePercent: pct, source };
   }
 
   // ─── 서비스 목록 ───────────────────────────────────────────────
@@ -294,8 +369,8 @@ export async function GET() {
     // 1. Vercel
     (() => {
       const metrics = [
-        metric('대역폭', vercelBandwidthGB, 100, 'GB'),
-        metric('함수 호출', vercelFnInvocations, 100_000, '회'),
+        metric('대역폭', vercelBandwidth.value, 100, 'GB', vercelBandwidth.source),
+        metric('함수 호출', vercelFnInvoc.value, 100_000, '회', vercelFnInvoc.source),
       ];
       return {
         id: 'vercel',
@@ -322,9 +397,10 @@ export async function GET() {
 
     // 2. Railway
     (() => {
+      const railwayCostValue = railwayUsage.value ?? 0;
       const metrics = [
-        metric('크레딧 사용', railwayUsageUsd, 5, 'USD'),
-        metric('메모리', railwayMemoryMB, 512, 'MB'),
+        metric('크레딧 사용', railwayUsage.value, 5, 'USD', railwayUsage.source),
+        metric('메모리', railwayMemory.value, 512, 'MB', railwayMemory.source),
       ];
       return {
         id: 'railway',
@@ -332,9 +408,11 @@ export async function GET() {
         description: 'FastAPI 백엔드 서버 (파이프라인 오케스트레이션)',
         category: 'backend' as const,
         currentPlan: 'Hobby ($5 크레딧/월)',
-        monthlyCostUsd: railwayUsageUsd,
+        monthlyCostUsd: railwayCostValue,
         isVariableCost: true,
-        costLabel: `$${railwayUsageUsd.toFixed(2)} / $5.00`,
+        costLabel: railwayUsage.value !== null
+          ? `$${railwayCostValue.toFixed(2)} / $5.00`
+          : '미설정',
         status: worstStatus(metrics),
         connectionStatus: railwayConnStatus,
         metrics,
@@ -351,15 +429,15 @@ export async function GET() {
 
     // 3. Supabase
     (() => {
-      const dbLabel = supabaseLive.fetched ? 'DB 용량 (실시간)' : 'DB 용량';
+      const dbLabel = supabaseDbMB.source === 'live' ? 'DB 용량 (실시간)' : 'DB 용량';
       const metrics = [
-        metric(dbLabel, supabaseDbMB, 500, 'MB'),
-        metric('월간 활성 유저', supabaseMau, 50_000, 'MAU'),
-        metric('대역폭', supabaseBandwidthGB, 5, 'GB'),
+        metric(dbLabel, supabaseDbMB.value, 500, 'MB', supabaseDbMB.source),
+        metric('월간 활성 유저', supabaseMau.value, 50_000, 'MAU', supabaseMau.source),
+        metric('대역폭', supabaseBandwidth.value, 5, 'GB', supabaseBandwidth.source),
       ];
       // 실시간 연결 수 메트릭 추가 (API 성공 시)
       if (supabaseLive.fetched && supabaseLive.activeConnections > 0) {
-        metrics.push(metric('활성 연결', supabaseLive.activeConnections, 60, '개'));
+        metrics.push(metric('활성 연결', supabaseLive.activeConnections, 60, '개', 'live'));
       }
       const descParts = ['PostgreSQL DB + 인증 + 스토리지 (BaaS)'];
       if (supabaseLive.fetched) {
@@ -393,10 +471,11 @@ export async function GET() {
 
     // 4. Anthropic Claude API
     (() => {
+      const anthropicCostValue = anthropicSpend.value ?? 0;
       const metrics = [
-        metric('월 예산 사용', anthropicSpendUsd, anthropicBudgetUsd, 'USD'),
+        metric('월 예산 사용', anthropicSpend.value, anthropicBudgetUsd, 'USD', anthropicSpend.source),
       ];
-      const usageSuffix = creditUsage.fetched && creditUsage.anthropicCredits > 0
+      const usageSuffix = anthropicSpend.source === 'live'
         ? ' (크레딧 실데이터)'
         : '';
       return {
@@ -405,9 +484,11 @@ export async function GET() {
         description: `AI 파이프라인 핵심 LLM — 에이전트 추론 엔진${usageSuffix}`,
         category: 'ai' as const,
         currentPlan: 'Pay-as-you-go',
-        monthlyCostUsd: anthropicSpendUsd,
+        monthlyCostUsd: anthropicCostValue,
         isVariableCost: true,
-        costLabel: `$${anthropicSpendUsd.toFixed(2)} 이번 달`,
+        costLabel: anthropicSpend.value !== null
+          ? `$${anthropicCostValue.toFixed(2)} 이번 달`
+          : '미설정',
         status: worstStatus(metrics),
         connectionStatus: anthropicConnStatus,
         metrics,
@@ -425,7 +506,7 @@ export async function GET() {
     // 5. Resend
     (() => {
       const metrics = [
-        metric('월 발송 이메일', resendEmailsSent, 3_000, '통'),
+        metric('월 발송 이메일', resendSent.value, 3_000, '통', resendSent.source),
       ];
       return {
         id: 'resend',
@@ -453,7 +534,7 @@ export async function GET() {
     // 6. Sentry
     (() => {
       const metrics = [
-        metric('월 에러 이벤트', sentryEventsUsed, 5_000, '건'),
+        metric('월 에러 이벤트', sentryEvents.value, 5_000, '건', sentryEvents.source),
       ];
       return {
         id: 'sentry',
@@ -481,7 +562,7 @@ export async function GET() {
     // 7. Google Drive
     (() => {
       const metrics = [
-        metric('스토리지', gdriveStorageGB, 15, 'GB'),
+        metric('스토리지', gdriveStorage.value, 15, 'GB', gdriveStorage.source),
       ];
       return {
         id: 'gdrive',
@@ -508,11 +589,15 @@ export async function GET() {
 
     // 8. OpenAI
     (() => {
-      const usagePercent = openaiBudgetUsd > 0 ? Math.round((openaiSpendUsd / openaiBudgetUsd) * 100) : 0;
-      const metrics: UsageMetric[] = openaiSpendUsd > 0
-        ? [{ label: '월 예산 사용', current: openaiSpendUsd, limit: openaiBudgetUsd, unit: 'USD', usagePercent }]
+      const openaiSpendValue = openaiSpend.value ?? 0;
+      const hasSpend = openaiSpend.value !== null && openaiSpend.value > 0;
+      const usagePercent = hasSpend && openaiBudgetUsd > 0
+        ? Math.round((openaiSpendValue / openaiBudgetUsd) * 100)
+        : 0;
+      const metrics: UsageMetric[] = hasSpend
+        ? [{ label: '월 예산 사용', current: openaiSpendValue, limit: openaiBudgetUsd, unit: 'USD', usagePercent, source: openaiSpend.source }]
         : [];
-      const usageSuffix = creditUsage.fetched && creditUsage.openaiCredits > 0
+      const usageSuffix = openaiSpend.source === 'live'
         ? ' (크레딧 실데이터)'
         : '';
       return {
@@ -520,10 +605,10 @@ export async function GET() {
         name: 'OpenAI API',
         description: `GPT 모델 — 현재 미사용 (선택적 연동)${usageSuffix}`,
         category: 'ai' as const,
-        currentPlan: openaiSpendUsd > 0 ? 'Pay-as-you-go' : '미연결',
-        monthlyCostUsd: openaiSpendUsd,
+        currentPlan: hasSpend ? 'Pay-as-you-go' : '미연결',
+        monthlyCostUsd: openaiSpendValue,
         isVariableCost: true,
-        costLabel: openaiSpendUsd > 0 ? `$${openaiSpendUsd.toFixed(2)} 이번 달` : '미사용',
+        costLabel: hasSpend ? `$${openaiSpendValue.toFixed(2)} 이번 달` : '미사용',
         status: metrics.length > 0 ? worstStatus(metrics) : 'stable',
         connectionStatus: openaiConnStatus,
         metrics,

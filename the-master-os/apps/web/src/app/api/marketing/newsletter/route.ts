@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { apiError, handleApiError, type ApiErrorBody } from '@/lib/api-response';
 
@@ -43,15 +44,15 @@ export async function POST(
 
     const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
     if (!FASTAPI_URL) {
-      // Mock response in dev (no Resend configured)
-      return NextResponse.json({
-        data: {
-          sent_count: 0,
-          failed_count: 0,
-          email_ids: [],
-          workspace_id: body.workspace_id,
-        },
-      });
+      Sentry.captureException(
+        new Error('FASTAPI_URL not configured for newsletter send'),
+        { tags: { context: 'marketing.newsletter.POST' } },
+      );
+      return apiError(
+        'SERVICE_UNAVAILABLE',
+        '뉴스레터 발송 서비스(FASTAPI_URL)가 구성되지 않았습니다. 관리자에게 문의하세요.',
+        503,
+      );
     }
 
     const resp = await fetch(

@@ -58,7 +58,7 @@ export default async function GrantsPage() {
           .order('created_at', { ascending: false })
           .limit(100);
 
-        tenders = (tendersData ?? []) as unknown as TenderSubmission[];
+        tenders = (tendersData ?? []) as TenderSubmission[];
       }
     }
   } catch (error) {

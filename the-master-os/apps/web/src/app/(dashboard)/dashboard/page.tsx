@@ -200,14 +200,15 @@ export default async function DashboardPage() {
       checkFastapiHealth(),
     ]);
 
-    const workspaces = (workspacesResult.data ?? []) as unknown as WorkspaceBasic[];
-    const agents = (agentsResult.data ?? []) as unknown as AgentBasic[];
-    const assignments = (assignmentsResult.data ?? []) as unknown as AssignmentBasic[];
+    const workspaces = (workspacesResult.data ?? []) as WorkspaceBasic[];
+    const agents = (agentsResult.data ?? []) as AgentBasic[];
+    const assignments = (assignmentsResult.data ?? []) as AssignmentBasic[];
+    // Relations inferred as arrays by PostgREST parser, needs double cast
     const pipelineExecs = (pipelineExecsResult.data ?? []) as unknown as PipelineExecRow[];
-    const creditTxs = (creditsResult.data ?? []) as unknown as CreditTx[];
-    const auditLogs = (auditLogsResult.data ?? []) as unknown as AuditLog[];
-    const mcpConnections = (mcpConnectionsResult.data ?? []) as unknown as McpConnectionRow[];
-    const contentSchedules = (contentSchedulesResult.data ?? []) as unknown as ContentScheduleRow[];
+    const creditTxs = (creditsResult.data ?? []) as CreditTx[];
+    const auditLogs = (auditLogsResult.data ?? []) as AuditLog[];
+    const mcpConnections = (mcpConnectionsResult.data ?? []) as McpConnectionRow[];
+    const contentSchedules = (contentSchedulesResult.data ?? []) as ContentScheduleRow[];
     const todayPipelineCount = todayPipelineCountResult.count ?? 0;
 
     // Credit balances per workspace
@@ -310,7 +311,7 @@ export default async function DashboardPage() {
         completed: completedPipelines,
         error: errorPipelines,
         today_executions: todayPipelineCount,
-        recent: pipelineExecs.slice(0, 5) as unknown as PipelineExecution[],
+        recent: pipelineExecs.slice(0, 5) as PipelineExecution[],
       },
       credits: {
         total_balance: totalCredits,

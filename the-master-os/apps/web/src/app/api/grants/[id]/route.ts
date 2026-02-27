@@ -69,7 +69,7 @@ export async function PATCH(
       if (!data) {
         return apiError('NOT_FOUND', `Submission '${params.id}' not found`, 404);
       }
-      return NextResponse.json({ data: data as unknown as TenderSubmission });
+      return NextResponse.json({ data: data as TenderSubmission });
     }
 
     // FastAPI proxy

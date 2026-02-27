@@ -38,6 +38,7 @@
     "react-dom": "^18.3",
     "react-hook-form": "^7.54",
     "recharts": "^2.15",
+    "stripe": "^20.4",
     "tailwind-merge": "^2.6",
     "zod": "^3.24",
     "zustand": "^5.0"

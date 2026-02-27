@@ -167,7 +167,7 @@ export async function POST(
           .single();
 
         if (!error && data) {
-          inserted.push(data as unknown as TenderSubmission);
+          inserted.push(data as TenderSubmission);
         }
       }
 

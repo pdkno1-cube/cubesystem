@@ -181,6 +181,7 @@ export async function PATCH(
         body.workspace_id,
         typedAlert.threshold_percent,
         typedAlert.id,
+        typedAlert.alert_type,
       );
       thresholdExceeded = usageExceeded;
     }
@@ -197,12 +198,79 @@ export async function PATCH(
 }
 
 // ---------------------------------------------------------------------------
+// Notification dispatch — record alert trigger to budget_alert_notifications
+// ---------------------------------------------------------------------------
+
+interface AlertNotificationPayload {
+  alert_id: string;
+  workspace_id: string;
+  threshold_percent: number;
+  usage_percent: number;
+  alert_type: BudgetAlert["alert_type"];
+  triggered_at: string;
+  notified: boolean;
+}
+
+/**
+ * Records the budget alert notification in the `budget_alert_notifications` table
+ * and adds a Sentry breadcrumb. Email/Slack delivery is handled by a separate
+ * background worker or future integration.
+ */
+async function dispatchAlertNotification(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  payload: AlertNotificationPayload,
+): Promise<void> {
+  const triggeredAt = payload.triggered_at;
+
+  // Insert notification record into Supabase
+  const { error: insertError } = await supabase
+    .from("budget_alert_notifications")
+    .insert({
+      alert_id: payload.alert_id,
+      workspace_id: payload.workspace_id,
+      threshold_percent: payload.threshold_percent,
+      usage_percent: Math.round(payload.usage_percent * 100) / 100,
+      alert_type: payload.alert_type,
+      triggered_at: triggeredAt,
+      notified: true,
+    });
+
+  if (insertError) {
+    // If the table doesn't exist yet, log via Sentry but don't crash
+    Sentry.captureException(insertError, {
+      tags: { context: "billing.alerts.dispatchNotification" },
+      extra: {
+        workspace_id: payload.workspace_id,
+        threshold_percent: payload.threshold_percent,
+        usage_percent: payload.usage_percent,
+      },
+    });
+  }
+
+  // Add Sentry breadcrumb for observability regardless of DB insert result
+  Sentry.addBreadcrumb({
+    category: "billing.alert.notification",
+    message: `Budget alert dispatched: ${String(Math.round(payload.usage_percent))}% usage >= ${String(payload.threshold_percent)}% threshold`,
+    level: "warning",
+    data: {
+      workspace_id: payload.workspace_id,
+      alert_id: payload.alert_id,
+      alert_type: payload.alert_type,
+      threshold_percent: payload.threshold_percent,
+      usage_percent: payload.usage_percent,
+      triggered_at: triggeredAt,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Threshold check helper
 // ---------------------------------------------------------------------------
 
 /**
  * 워크스페이스의 현재 월 크레딧 사용 비율이 threshold_percent 이상이면
- * budget_alerts.last_triggered_at을 현재 시각으로 업데이트한다.
+ * budget_alerts.last_triggered_at을 현재 시각으로 업데이트하고
+ * 알림 기록을 budget_alert_notifications 테이블에 저장한다.
  *
  * @returns true if threshold was exceeded and trigger was recorded
  */
@@ -211,6 +279,7 @@ async function checkAndTriggerThreshold(
   workspaceId: string,
   thresholdPercent: number,
   alertId: string,
+  alertType: BudgetAlert["alert_type"],
 ): Promise<boolean> {
   try {
     // 워크스페이스 크레딧 한도 조회
@@ -247,9 +316,11 @@ async function checkAndTriggerThreshold(
 
     if (usagePercent >= thresholdPercent) {
       // 임계치 초과 — last_triggered_at 업데이트
+      const now = new Date().toISOString();
+
       const { error: updateError } = await supabase
         .from("budget_alerts")
-        .update({ last_triggered_at: new Date().toISOString() })
+        .update({ last_triggered_at: now })
         .eq("id", alertId);
 
       if (updateError) {
@@ -259,8 +330,17 @@ async function checkAndTriggerThreshold(
         });
       }
 
-      // TODO: 실제 알림 발송 (이메일/Slack) 구현
-      // 현재는 DB에 trigger 기록만 수행
+      // Dispatch notification record
+      await dispatchAlertNotification(supabase, {
+        alert_id: alertId,
+        workspace_id: workspaceId,
+        threshold_percent: thresholdPercent,
+        usage_percent: usagePercent,
+        alert_type: alertType,
+        triggered_at: now,
+        notified: true,
+      });
+
       Sentry.addBreadcrumb({
         category: "billing.alert",
         message: `Budget threshold triggered: ${String(Math.round(usagePercent))}% >= ${String(thresholdPercent)}%`,

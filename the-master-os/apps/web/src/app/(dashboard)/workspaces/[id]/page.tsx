@@ -105,15 +105,7 @@ export default async function WorkspaceDetailPage({
     } as WorkspaceWithStats;
   } catch (error) {
     Sentry.captureException(error, { tags: { context: 'workspaces.detail.page.load' } });
-    // Supabase 미연결 시 mock 데이터
-    workspaceWithStats = {
-      id, name: '엉클로지텍 (Mock)', slug: 'mock-workspace', description: 'Supabase 미연결 - Mock 데이터',
-      icon_url: null, owner_id: 'user-001', status: 'active', is_active: true,
-      settings: { category: 'logistics', icon: 'Truck' },
-      created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z', deleted_at: null,
-      agent_count: 3, active_pipeline_count: 1, credit_balance: 28500, member_count: 1,
-      category: 'logistics', icon: 'Truck',
-    };
+    notFound();
   }
 
   return (

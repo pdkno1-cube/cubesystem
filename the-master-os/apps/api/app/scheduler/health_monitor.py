@@ -19,9 +19,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    from supabase._async.client import AsyncClient as SupabaseAsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,7 @@ _MCP_CHECK_TIMEOUT_SECONDS = 15
 
 
 async def run_health_monitor(
-    supabase: Any,
+    supabase: SupabaseAsyncClient,
     supabase_url: str,
     supabase_key: str,
 ) -> None:
@@ -104,7 +107,7 @@ async def _check_supabase(supabase_url: str, supabase_key: str) -> bool:
         return False
 
 
-async def _check_mcp_providers(supabase: Any) -> dict[str, bool]:
+async def _check_mcp_providers(supabase: SupabaseAsyncClient) -> dict[str, bool]:
     """Check MCP providers for all workspaces with active connections.
 
     Returns a dict like ``{"mcp:resend:ws-abc": True, "mcp:slack:ws-abc": False}``.
@@ -194,12 +197,12 @@ async def _check_mcp_providers(supabase: Any) -> dict[str, bool]:
 
 
 async def _create_incident_for_all_workspaces(
-    supabase: Any,
+    supabase: SupabaseAsyncClient,
     *,
     source_service: str,
     incident_type: str,
     severity: str,
-    details: dict[str, Any],
+    details: dict[str, object],
 ) -> None:
     """Create a healing incident for every workspace (used for global outages like Supabase)."""
     try:
@@ -227,13 +230,13 @@ async def _create_incident_for_all_workspaces(
 
 
 async def _create_incident(
-    supabase: Any,
+    supabase: SupabaseAsyncClient,
     *,
     workspace_id: str,
     source_service: str,
     incident_type: str,
     severity: str,
-    details: dict[str, Any],
+    details: dict[str, object],
 ) -> None:
     """Create a healing_incidents row if no active incident already exists for this service."""
     now = datetime.now(tz=timezone.utc)
@@ -309,13 +312,13 @@ async def _create_incident(
 
 
 async def _write_audit_log(
-    supabase: Any,
+    supabase: SupabaseAsyncClient,
     *,
     workspace_id: str,
     action: str,
     resource_type: str,
     resource_id: str,
-    details: dict[str, Any],
+    details: dict[str, object],
 ) -> None:
     """Write an audit log entry (best-effort)."""
     try:
