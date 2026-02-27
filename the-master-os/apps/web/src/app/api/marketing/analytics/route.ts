@@ -88,7 +88,7 @@ export async function GET(
     const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
 
     if (FASTAPI_URL) {
-      // Proxy to FastAPI
+      // Proxy to FastAPI — fallback to Supabase on 404 (endpoint not yet deployed)
       const endpoint = queryType === 'timeseries' ? 'timeseries' : 'overview';
       const params = new URLSearchParams({
         workspace_id: workspaceId,
@@ -98,15 +98,18 @@ export async function GET(
         `${FASTAPI_URL}/orchestrate/marketing/analytics/${endpoint}?${params.toString()}`,
         { headers: { 'X-User-Id': user.id } },
       );
-      if (!resp.ok) {
+      if (resp.ok) {
+        const body = (await resp.json()) as AnalyticsResponse;
+        return NextResponse.json(body);
+      }
+      // 404 = endpoint not deployed yet → fall through to Supabase
+      if (resp.status !== 404) {
         const text = await resp.text();
         return apiError('FASTAPI_ERROR', text, resp.status);
       }
-      const body = (await resp.json()) as AnalyticsResponse;
-      return NextResponse.json(body);
     }
 
-    // Dev fallback: direct Supabase queries
+    // Supabase direct queries (fallback when FastAPI unavailable)
     const since = new Date(Date.now() - Number(days) * MS_PER_DAY).toISOString();
 
     if (queryType === 'timeseries') {
