@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { User, Shield, Info, ExternalLink } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -120,7 +121,8 @@ function MFASection() {
         const { data } = await supabase.auth.mfa.listFactors();
         const totpFactors = data?.totp ?? [];
         setMfaEnrolled(totpFactors.length > 0);
-      } catch {
+      } catch (error) {
+        Sentry.captureException(error, { tags: { context: 'settings.mfa.check' } });
         setMfaEnrolled(false);
       } finally {
         setChecking(false);
@@ -200,7 +202,8 @@ function SystemInfoSection() {
       const supabase = createClient();
       const { error } = await supabase.from("workspaces").select("id", { count: "exact", head: true });
       setSupabaseStatus(error ? "미연결" : "연결됨");
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'settings.supabase.healthcheck' } });
       setSupabaseStatus("미연결");
     }
   }, []);
@@ -211,7 +214,8 @@ function SystemInfoSection() {
       const res = await fetch("/api/health/fastapi", { cache: "no-store" });
       const data: { healthy: boolean } = await res.json();
       setFastapiStatus(data.healthy ? "연결됨" : "미연결");
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'settings.fastapi.healthcheck' } });
       setFastapiStatus("미연결");
     }
   }, []);

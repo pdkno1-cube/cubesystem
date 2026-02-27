@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as Sentry from '@sentry/nextjs';
 import type { Database } from '@/types/database';
 
 type AgentRow = Database['public']['Tables']['agents']['Row'];
@@ -110,7 +111,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         filter: currentFilter,
         isLoading: false,
       });
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'agents.fetchAll' } });
       set({ isLoading: false, error: '에이전트 목록을 불러오는 데 실패했습니다.' });
     }
   },
@@ -193,7 +195,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
       // Re-fetch to get fresh data
       await get().fetchAgents();
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'agents.assign' } });
       set({ agents: prevAgents, error: '에이전트 할당에 실패했습니다.' });
     }
   },
@@ -230,7 +233,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }
 
       await get().fetchAgents();
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'agents.release' } });
       set({ agents: prevAgents, error: '에이전트 회수에 실패했습니다.' });
     }
   },
@@ -251,7 +255,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       if (result.error) {
         set({ agents: prevAgents, error: result.error.message });
       }
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'agents.delete' } });
       set({ agents: prevAgents, error: '에이전트 삭제에 실패했습니다.' });
     }
   },

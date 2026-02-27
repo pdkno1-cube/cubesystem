@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { Plug2 } from 'lucide-react';
 import { McpProviderCard, type ProviderStatus } from './McpProviderCard';
 import { ConnectProviderModal } from './ConnectProviderModal';
@@ -34,8 +35,8 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
       }
       const result = await res.json() as { data: ProviderStatus[] };
       setProviders(result.data ?? []);
-    } catch {
-      // silent — section is non-critical
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'mcp.providers.fetch' } });
     } finally {
       setIsLoading(false);
     }
@@ -59,8 +60,8 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
         { method: 'DELETE' },
       );
       await fetchProviders();
-    } catch {
-      // silent
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'mcp.provider.disconnect' } });
     }
   };
 
@@ -71,8 +72,8 @@ export function McpProviderSection({ workspaceId, vaultSecrets }: McpProviderSec
         method: 'POST',
       });
       await fetchProviders();
-    } catch {
-      // silent
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'mcp.provider.test' } });
     } finally {
       setTestingProvider(null);
     }

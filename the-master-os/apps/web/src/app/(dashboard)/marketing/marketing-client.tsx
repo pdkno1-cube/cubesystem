@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { ChevronLeft, ChevronRight, Loader2, CalendarDays, BarChart3 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { CalendarGrid } from '@/components/marketing/CalendarGrid';
@@ -224,8 +225,9 @@ export function MarketingClient({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scheduled_at: updated.toISOString() }),
         });
-      } catch {
-        // Revert on failure (best-effort — silent)
+      } catch (error) {
+        Sentry.captureException(error, { tags: { context: 'marketing.schedule.drop' } });
+        // Revert on failure (best-effort)
         void fetchSchedules(viewYear, viewMonth);
       }
     },
@@ -241,7 +243,8 @@ export function MarketingClient({
         await fetch(`/api/marketing/schedules/${id}`, {
           method: 'DELETE',
         });
-      } catch {
+      } catch (error) {
+        Sentry.captureException(error, { tags: { context: 'marketing.schedule.cancel' } });
         void fetchSchedules(viewYear, viewMonth);
       }
     },
@@ -277,7 +280,8 @@ export function MarketingClient({
           body: JSON.stringify({ status: 'completed' }),
         });
         closeSlider();
-      } catch {
+      } catch (error) {
+        Sentry.captureException(error, { tags: { context: 'marketing.newsletter.sendNow' } });
         updateScheduleStatus(id, 'failed');
       }
     },

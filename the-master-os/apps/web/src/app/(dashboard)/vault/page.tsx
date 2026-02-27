@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import {
   KeyRound,
   Plus,
@@ -278,7 +279,8 @@ function CreateSecretDialog({
       onCreated(result.data);
       resetForm();
       onOpenChange(false);
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'vault.secret.create' } });
       setFormError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);
@@ -433,6 +435,7 @@ export default function VaultPage() {
       const result = (await res.json()) as { data: VaultSecret[]; total: number };
       setSecrets(result.data);
     } catch (err) {
+      Sentry.captureException(err, { tags: { context: 'vault.secrets.fetch' } });
       const message =
         err instanceof Error ? err.message : '시크릿 목록을 불러올 수 없습니다.';
       setFetchError(message);
@@ -453,7 +456,8 @@ export default function VaultPage() {
       setWorkspaces(
         result.data.map((ws) => ({ id: ws.id, name: ws.name })),
       );
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'vault.workspaces.fetch' } });
       // Workspace fetch failure is non-critical; create dialog will show empty list
     }
   }, []);
@@ -496,6 +500,7 @@ export default function VaultPage() {
       setSecrets((prev) => prev.filter((s) => s.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {
+      Sentry.captureException(err, { tags: { context: 'vault.secret.delete' } });
       const message =
         err instanceof Error ? err.message : '시크릿 삭제에 실패했습니다.';
       setFetchError(message);

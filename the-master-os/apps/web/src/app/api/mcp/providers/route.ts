@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 
 const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
@@ -88,7 +89,8 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({ data: statuses });
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'mcp.providers.GET' } });
     return NextResponse.json({ error: { code: 'DB_ERROR', message: 'Failed to fetch providers' } }, { status: 500 });
   }
 }

@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { DashboardClient } from './dashboard-client';
 import type { DashboardData, PipelineExecution, AuditLog } from './types';
@@ -207,7 +208,8 @@ export default async function DashboardPage() {
       },
       audit_logs: auditLogs,
     };
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'dashboard.page.load' } });
     // Supabase 미연결 시 mock 데이터 사용
     dashboardData = getMockDashboardData();
   }

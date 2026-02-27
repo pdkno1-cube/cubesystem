@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { WorkspaceDetailClient } from './workspace-detail';
@@ -93,7 +94,8 @@ export default async function WorkspaceDetailPage({
       category: (settings?.category as WorkspaceCategory | undefined) ?? undefined,
       icon: (settings?.icon as WorkspaceIcon | undefined) ?? undefined,
     } as WorkspaceWithStats;
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'workspaces.detail.page.load' } });
     // Supabase 미연결 시 mock 데이터
     workspaceWithStats = {
       id, name: '엉클로지텍 (Mock)', slug: 'mock-workspace', description: 'Supabase 미연결 - Mock 데이터',

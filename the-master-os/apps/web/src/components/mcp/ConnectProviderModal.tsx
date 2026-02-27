@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import {
   Dialog,
   DialogContent,
@@ -95,7 +96,8 @@ export function ConnectProviderModal({
       setEndpointUrl('');
       onOpenChange(false);
       onConnected();
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'mcp.provider.connect' } });
       setFormError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);

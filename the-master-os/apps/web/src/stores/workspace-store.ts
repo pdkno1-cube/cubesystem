@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as Sentry from '@sentry/nextjs';
 import type {
   WorkspaceWithStats,
   CreateWorkspaceInput,
@@ -73,7 +74,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         workspaces: result.data?.data ?? [],
         isLoading: false,
       });
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'workspaces.fetchAll' } });
       set({
         isLoading: false,
         error: {
@@ -101,7 +103,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         selectedWorkspace: result.data?.data ?? null,
         isLoading: false,
       });
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'workspaces.fetchOne' } });
       set({
         isLoading: false,
         error: {
@@ -242,7 +245,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       } else {
         set({ isLoading: false });
       }
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'workspaces.update' } });
       set({
         workspaces: previousWorkspaces,
         selectedWorkspace: previousSelected,
@@ -281,7 +285,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
 
       set({ isLoading: false });
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'workspaces.archive' } });
       set({
         workspaces: previousWorkspaces,
         isLoading: false,

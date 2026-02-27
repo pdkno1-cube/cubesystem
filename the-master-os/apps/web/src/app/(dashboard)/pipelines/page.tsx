@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { PipelineClient } from './pipeline-client';
 import type { Database } from '@/types/database';
@@ -208,7 +209,8 @@ export default async function PipelinesPage() {
 
     pipelines = (pipelinesData ?? []) as unknown as PipelineWithMeta[];
     workspaces = (workspacesData ?? []) as SimpleWorkspace[];
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'pipelines.page.load' } });
     // Supabase not connected: use mock data
     pipelines = MOCK_PIPELINES;
     workspaces = MOCK_WORKSPACES;

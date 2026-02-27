@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 
 const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
@@ -59,7 +60,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ data }, { status: 201 });
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'mcp.connections.POST' } });
     return NextResponse.json(
       { error: { code: 'SERVER_ERROR', message: 'Failed to create connection' } },
       { status: 500 },
@@ -99,7 +101,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({
       data: { connection_id: connectionId, disconnected: (data ?? []).length > 0 },
     });
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'mcp.connections.DELETE' } });
     return NextResponse.json(
       { error: { code: 'DB_ERROR', message: 'Failed to disconnect' } },
       { status: 500 },

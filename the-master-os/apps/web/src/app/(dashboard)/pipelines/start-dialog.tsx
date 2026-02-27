@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Play } from 'lucide-react';
 import type { PipelineWithMeta } from './page';
@@ -92,6 +93,7 @@ export function StartDialog({
         await onExecute(pipeline.id, workspaceId, inputData.trim());
         resetForm();
       } catch (err) {
+        Sentry.captureException(err, { tags: { context: 'pipelines.execute' } });
         const message =
           err instanceof Error ? err.message : '파이프라인 실행에 실패했습니다.';
         setFormError(message);

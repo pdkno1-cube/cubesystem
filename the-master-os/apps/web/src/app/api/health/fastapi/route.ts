@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 
 const FASTAPI_URL = process.env.FASTAPI_URL ?? '';
 
@@ -33,6 +34,7 @@ export async function GET() {
 
     return NextResponse.json({ healthy, upstream: data });
   } catch (err: unknown) {
+    Sentry.captureException(err, { tags: { context: 'health.fastapi.GET' } });
     const message =
       err instanceof Error ? err.message : 'Unknown fetch error';
     return NextResponse.json(

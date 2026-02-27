@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as Sentry from '@sentry/nextjs';
 import type { User, LoginResult, MfaChallenge } from '@/types/auth';
 
 interface AuthState {
@@ -124,7 +125,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         mfaChallenge: null,
         error: null,
       };
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'auth.login' } });
       set({ isLoading: false });
       return {
         success: false,
@@ -167,7 +169,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
         });
       }
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'auth.refreshSession' } });
       set({
         user: null,
         isAuthenticated: false,
@@ -195,7 +198,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ mfaChallenge: null });
 
       return true;
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'auth.verifyMfa' } });
       set({ isLoading: false });
       return false;
     }
@@ -223,7 +227,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
         });
       }
-    } catch {
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'auth.fetchCurrentUser' } });
       set({
         user: null,
         isAuthenticated: false,

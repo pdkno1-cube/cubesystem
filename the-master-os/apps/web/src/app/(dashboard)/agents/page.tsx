@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { AgentPoolClient } from './agent-pool';
 import type { Database } from '@/types/database';
@@ -56,7 +57,8 @@ export default async function AgentsPage() {
 
     agents = (agentsData ?? []) as AgentWithAssignment[];
     workspaces = (workspacesData ?? []) as SimpleWorkspace[];
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'agents.page.load' } });
     // Supabase 미연결 시 mock 데이터
     agents = [
       { id: 'agent-001', name: '기획 에이전트', display_name: '기획 에이전트', slug: 'planner', description: '사업계획서 및 전략 문서 작성', icon: null, category: 'planning', model_provider: 'anthropic', model: 'claude-sonnet-4-6', system_prompt: '', parameters: {}, is_system: true, is_active: true, cost_per_run: 150, created_by: null, created_at: '2026-03-01', updated_at: '2026-03-01', deleted_at: null, agent_assignments: [] },

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -136,6 +137,7 @@ export function CreateWorkspaceDialog({
         reset();
         onCreated();
       } catch (err) {
+        Sentry.captureException(err, { tags: { context: 'workspaces.create' } });
         const message =
           err instanceof Error
             ? err.message

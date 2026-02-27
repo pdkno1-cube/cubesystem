@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { MarketingClient } from './marketing-client';
 import type { ScheduleItem } from '@/stores/marketingStore';
@@ -49,7 +50,8 @@ export default async function MarketingPage() {
         schedules = (schedulesData ?? []) as unknown as ScheduleItem[];
       }
     }
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'marketing.page.load' } });
     // Supabase not connected or no session — render with empty state
   }
 

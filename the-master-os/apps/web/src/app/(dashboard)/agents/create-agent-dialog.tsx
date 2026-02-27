@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Plus } from 'lucide-react';
 import { useAgentStore } from '@/stores/agent-store';
@@ -114,6 +115,7 @@ export function CreateAgentDialog({
         resetForm();
         onCreated();
       } catch (err) {
+        Sentry.captureException(err, { tags: { context: 'agents.create' } });
         const message =
           err instanceof Error ? err.message : '에이전트 생성에 실패했습니다.';
         setFormError(message);

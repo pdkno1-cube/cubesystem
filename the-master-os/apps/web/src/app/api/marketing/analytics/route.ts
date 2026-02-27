@@ -2,7 +2,42 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { apiError, handleApiError, type ApiErrorBody } from '@/lib/api-response';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────
+
+const MS_PER_DAY = 86_400_000;
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+/** Extract YYYY-MM-DD date key from an ISO timestamp string. */
+const toDateKey = (iso: string): string => iso.slice(0, 10);
+
+// ── Supabase Row Types ────────────────────────────────────────────────────
+
+interface ContentScheduleRow {
+  id: string;
+  channel: string;
+  status: string;
+  scheduled_at: string;
+  published_at: string | null;
+  created_at: string;
+}
+
+interface PipelineExecutionRow {
+  id: string;
+  credits_used: number;
+  status: string;
+  created_at: string;
+}
+
+interface ContentMetricRow {
+  id: string;
+  opens: number;
+  clicks: number;
+  impressions: number;
+  created_at: string;
+}
+
+// ── Response Types ────────────────────────────────────────────────────────
 
 interface ChannelBreakdown {
   channel: string;
@@ -72,7 +107,7 @@ export async function GET(
     }
 
     // Dev fallback: direct Supabase queries
-    const since = new Date(Date.now() - Number(days) * 86400000).toISOString();
+    const since = new Date(Date.now() - Number(days) * MS_PER_DAY).toISOString();
 
     if (queryType === 'timeseries') {
       return await handleTimeseries(supabase, workspaceId, since, Number(days));
@@ -91,55 +126,57 @@ async function handleOverview(
   since: string,
 ): Promise<NextResponse<{ data: AnalyticsOverview } | ApiErrorBody>> {
   // Schedules
-  const { data: schedules } = await supabase
+  const { data: rawSchedules } = await supabase
     .from('content_schedules')
     .select('channel, status')
     .eq('workspace_id', workspaceId)
     .gte('created_at', since)
     .is('deleted_at', null);
 
+  const schedules = (rawSchedules ?? []) as Pick<ContentScheduleRow, 'channel' | 'status'>[];
   const channelMap = new Map<string, number>();
   let publishedCount = 0;
-  for (const s of schedules ?? []) {
-    const ch = (s as Record<string, unknown>).channel as string;
-    channelMap.set(ch, (channelMap.get(ch) ?? 0) + 1);
-    if ((s as Record<string, unknown>).status === 'completed') {
+  for (const s of schedules) {
+    channelMap.set(s.channel, (channelMap.get(s.channel) ?? 0) + 1);
+    if (s.status === 'completed') {
       publishedCount++;
     }
   }
 
   // Executions
-  const { data: executions } = await supabase
+  const { data: rawExecutions } = await supabase
     .from('pipeline_executions')
     .select('credits_used')
     .eq('workspace_id', workspaceId)
     .gte('created_at', since);
 
-  const totalExecutions = executions?.length ?? 0;
-  const totalCredits = (executions ?? []).reduce(
-    (sum, e) => sum + Number((e as Record<string, unknown>).credits_used ?? 0),
+  const executions = (rawExecutions ?? []) as Pick<PipelineExecutionRow, 'credits_used'>[];
+  const totalExecutions = executions.length;
+  const totalCredits = executions.reduce(
+    (sum, e) => sum + Number(e.credits_used ?? 0),
     0,
   );
 
   // Metrics (newsletter opens/impressions from aggregated content_metrics)
-  const { data: metrics } = await supabase
+  const { data: rawMetrics } = await supabase
     .from('content_metrics')
     .select('opens, impressions')
     .eq('workspace_id', workspaceId)
     .eq('channel', 'newsletter')
     .gte('created_at', since);
 
-  const totalImpressions = (metrics ?? []).reduce(
-    (sum, m) => sum + Number((m as Record<string, unknown>).impressions ?? 0),
+  const metrics = (rawMetrics ?? []) as Pick<ContentMetricRow, 'opens' | 'impressions'>[];
+  const totalImpressions = metrics.reduce(
+    (sum, m) => sum + Number(m.impressions ?? 0),
     0,
   );
-  const totalOpens = (metrics ?? []).reduce(
-    (sum, m) => sum + Number((m as Record<string, unknown>).opens ?? 0),
+  const totalOpens = metrics.reduce(
+    (sum, m) => sum + Number(m.opens ?? 0),
     0,
   );
   const openRate = totalImpressions > 0 ? totalOpens / totalImpressions : 0;
 
-  const totalSchedules = schedules?.length ?? 1;
+  const totalSchedules = schedules.length || 1;
   const channelBreakdown: ChannelBreakdown[] = Array.from(channelMap.entries())
     .sort((a, b) => b[1] - a[1])
     .map(([channel, count]) => ({
@@ -165,13 +202,13 @@ async function handleTimeseries(
   since: string,
   days: number,
 ): Promise<NextResponse<{ data: { points: TimeseriesPoint[] } } | ApiErrorBody>> {
-  const { data: executions } = await supabase
+  const { data: rawExecutions } = await supabase
     .from('pipeline_executions')
     .select('created_at')
     .eq('workspace_id', workspaceId)
     .gte('created_at', since);
 
-  const { data: schedules } = await supabase
+  const { data: rawSchedules } = await supabase
     .from('content_schedules')
     .select('published_at')
     .eq('workspace_id', workspaceId)
@@ -179,41 +216,45 @@ async function handleTimeseries(
     .gte('created_at', since)
     .is('deleted_at', null);
 
-  const { data: metrics } = await supabase
+  const { data: rawMetrics } = await supabase
     .from('content_metrics')
     .select('created_at, opens')
     .eq('workspace_id', workspaceId)
     .eq('channel', 'newsletter')
     .gte('created_at', since);
 
+  const executions = (rawExecutions ?? []) as Pick<PipelineExecutionRow, 'created_at'>[];
+  const schedules = (rawSchedules ?? []) as Pick<ContentScheduleRow, 'published_at'>[];
+  const metrics = (rawMetrics ?? []) as Pick<ContentMetricRow, 'created_at' | 'opens'>[];
+
   const execByDay = new Map<string, number>();
-  for (const e of executions ?? []) {
-    const day = String((e as Record<string, unknown>).created_at ?? '').slice(0, 10);
+  for (const e of executions) {
+    const day = toDateKey(String(e.created_at ?? ''));
     if (day) {
       execByDay.set(day, (execByDay.get(day) ?? 0) + 1);
     }
   }
 
   const pubByDay = new Map<string, number>();
-  for (const s of schedules ?? []) {
-    const day = String((s as Record<string, unknown>).published_at ?? '').slice(0, 10);
+  for (const s of schedules) {
+    const day = toDateKey(String(s.published_at ?? ''));
     if (day) {
       pubByDay.set(day, (pubByDay.get(day) ?? 0) + 1);
     }
   }
 
   const opensByDay = new Map<string, number>();
-  for (const m of metrics ?? []) {
-    const day = String((m as Record<string, unknown>).created_at ?? '').slice(0, 10);
+  for (const m of metrics) {
+    const day = toDateKey(String(m.created_at ?? ''));
     if (day) {
-      opensByDay.set(day, (opensByDay.get(day) ?? 0) + Number((m as Record<string, unknown>).opens ?? 0));
+      opensByDay.set(day, (opensByDay.get(day) ?? 0) + Number(m.opens ?? 0));
     }
   }
 
   const now = Date.now();
   const points: TimeseriesPoint[] = [];
   for (let i = 0; i < days; i++) {
-    const d = new Date(now - (days - 1 - i) * 86400000).toISOString().slice(0, 10);
+    const d = toDateKey(new Date(now - (days - 1 - i) * MS_PER_DAY).toISOString());
     points.push({
       date: d,
       executions: execByDay.get(d) ?? 0,

@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { WorkspaceListClient } from './workspace-list';
 import type { WorkspaceWithStats, WorkspaceCategory, WorkspaceIcon } from '@/types/workspace';
@@ -61,7 +62,8 @@ export default async function WorkspacesPage() {
         );
       }
     }
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'workspaces.page.load' } });
     // Supabase 미연결 시 mock 데이터
     initialWorkspaces = [
       {
