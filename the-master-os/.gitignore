@@ -36,3 +36,12 @@ coverage/
 
 # misc
 *.log
+
+.vercel
+.env*.local
+
+# supabase temp
+supabase/.temp/
+
+# build artifacts
+*.tsbuildinfo
