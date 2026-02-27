@@ -36,9 +36,7 @@ export function Header({ title }: HeaderProps) {
           className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors"
         >
           <Bell className="h-5 w-5" />
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-            3
-          </span>
+          {/* Notification badge — will connect when notification system is implemented */}
         </button>
 
         {/* 프로필 */}

@@ -89,10 +89,13 @@ async def _fetch_agent(agent_id: str, settings: Settings) -> dict[str, object]:
 async def assign_agent(
     body: AgentAssignRequest,
     user: AuthenticatedUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
 ) -> BaseResponse[AgentStatusResponse]:
     """Allocate runtime resources for an agent within a workspace.
 
-    Skeleton -- actual Celery worker allocation will be implemented later.
+    1. Validate that the agent exists and is active.
+    2. Upsert an ``agent_assignments`` row (idle, assigned_at=now).
+    3. Return the assignment record wrapped in ``BaseResponse``.
     """
     logger.info(
         "Agent assign requested: agent_id=%s workspace_id=%s user=%s",
@@ -101,15 +104,78 @@ async def assign_agent(
         user.user_id,
     )
 
-    # TODO: Validate agent_id exists + workspace access
-    # TODO: Create/update agent_assignments in Supabase
-    # TODO: Allocate Celery worker slot
+    # 1. Validate agent exists and is active
+    agent_row = await _fetch_agent(body.agent_id, settings)
 
+    # 2. Upsert agent_assignments (unique on agent_id+workspace_id where released_at IS NULL)
+    sb = _supabase_client(settings)
+    now_iso = datetime.now(tz=timezone.utc).isoformat()
+
+    try:
+        # Check for an existing active assignment (released_at IS NULL)
+        existing_resp = (
+            sb.table("agent_assignments")
+            .select("id")
+            .eq("agent_id", body.agent_id)
+            .eq("workspace_id", body.workspace_id)
+            .is_("released_at", "null")
+            .limit(1)
+            .execute()
+        )
+
+        if existing_resp.data:
+            # Update the existing active assignment
+            existing_id: str = str(existing_resp.data[0]["id"])
+            upsert_resp = (
+                sb.table("agent_assignments")
+                .update({
+                    "status": "idle",
+                    "is_active": True,
+                    "config_override": body.config_override,
+                    "assigned_at": now_iso,
+                    "released_at": None,
+                })
+                .eq("id", existing_id)
+                .execute()
+            )
+        else:
+            # Insert a new assignment
+            upsert_resp = (
+                sb.table("agent_assignments")
+                .insert({
+                    "agent_id": body.agent_id,
+                    "workspace_id": body.workspace_id,
+                    "assigned_by": user.user_id,
+                    "config_override": body.config_override,
+                    "status": "idle",
+                    "is_active": True,
+                    "assigned_at": now_iso,
+                })
+                .execute()
+            )
+    except Exception as exc:
+        logger.exception(
+            "Failed to upsert agent_assignment: agent_id=%s workspace_id=%s",
+            body.agent_id,
+            body.workspace_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "ASSIGNMENT_FAILED",
+                "message": f"Failed to assign agent: {exc}",
+            },
+        ) from exc
+
+    # 3. Build response
     response_data = AgentStatusResponse(
         agent_id=body.agent_id,
         workspace_id=body.workspace_id,
         status="assigned",
-        assigned_at=datetime.now(tz=timezone.utc),
+        assigned_at=datetime.fromisoformat(now_iso),
+        agent_name=str(agent_row.get("name", "")),
+        model_provider=str(agent_row.get("model_provider", "")),
+        model=str(agent_row.get("model", "")),
     )
 
     return BaseResponse(data=response_data)
@@ -128,10 +194,13 @@ async def assign_agent(
 async def release_agent(
     body: AgentReleaseRequest,
     user: AuthenticatedUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
 ) -> BaseResponse[AgentStatusResponse]:
     """Free runtime resources for an agent.
 
-    Skeleton -- actual cleanup will be implemented later.
+    1. Find the active assignment (released_at IS NULL).
+    2. Set status='idle', released_at=now, is_active=false.
+    3. Return the updated status wrapped in ``BaseResponse``.
     """
     logger.info(
         "Agent release requested: agent_id=%s workspace_id=%s user=%s",
@@ -140,8 +209,57 @@ async def release_agent(
         user.user_id,
     )
 
-    # TODO: Update agent_assignments status in Supabase
-    # TODO: Release Celery worker slot
+    sb = _supabase_client(settings)
+    now_iso = datetime.now(tz=timezone.utc).isoformat()
+
+    try:
+        # Find active assignment for this agent + workspace
+        existing_resp = (
+            sb.table("agent_assignments")
+            .select("id")
+            .eq("agent_id", body.agent_id)
+            .eq("workspace_id", body.workspace_id)
+            .is_("released_at", "null")
+            .limit(1)
+            .execute()
+        )
+
+        if not existing_resp.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "ASSIGNMENT_NOT_FOUND",
+                    "message": (
+                        f"No active assignment found for agent '{body.agent_id}' "
+                        f"in workspace '{body.workspace_id}'"
+                    ),
+                },
+            )
+
+        assignment_id: str = str(existing_resp.data[0]["id"])
+
+        # Release the assignment
+        sb.table("agent_assignments").update({
+            "status": "idle",
+            "is_active": False,
+            "released_at": now_iso,
+        }).eq("id", assignment_id).execute()
+
+    except HTTPException:
+        raise  # Re-raise 404 as-is
+    except Exception as exc:
+        logger.exception(
+            "Failed to release agent_assignment: agent_id=%s workspace_id=%s",
+            body.agent_id,
+            body.workspace_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "RELEASE_FAILED",
+                "message": f"Failed to release agent: {exc}",
+            },
+        ) from exc
 
     response_data = AgentStatusResponse(
         agent_id=body.agent_id,

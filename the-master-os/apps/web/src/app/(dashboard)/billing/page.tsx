@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { CreditCard, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -95,8 +96,7 @@ export default function BillingPage() {
         const json: CreditsData = await res.json();
         setData(json);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "알 수 없는 에러";
-        console.error("[BillingPage] fetchCredits 실패:", message);
+        Sentry.captureException(err, { tags: { context: "billing.fetch" } });
       } finally {
         setIsLoading(false);
       }

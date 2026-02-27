@@ -176,12 +176,26 @@ function MFASection() {
   );
 }
 
+type ConnectionStatus = "연결됨" | "미연결" | "확인 중...";
+
+function statusDotClass(status: ConnectionStatus): string {
+  switch (status) {
+    case "연결됨":
+      return "bg-green-500";
+    case "미연결":
+      return "bg-red-400";
+    case "확인 중...":
+      return "bg-yellow-400 animate-pulse";
+  }
+}
+
 // -- 시스템 정보 섹션 --
 function SystemInfoSection() {
-  const [supabaseStatus, setSupabaseStatus] = useState<"연결됨" | "미연결" | "확인 중">("확인 중");
+  const [supabaseStatus, setSupabaseStatus] = useState<ConnectionStatus>("확인 중...");
+  const [fastapiStatus, setFastapiStatus] = useState<ConnectionStatus>("확인 중...");
 
   const checkSupabase = useCallback(async () => {
-    setSupabaseStatus("확인 중");
+    setSupabaseStatus("확인 중...");
     try {
       const supabase = createClient();
       const { error } = await supabase.from("workspaces").select("id", { count: "exact", head: true });
@@ -191,16 +205,24 @@ function SystemInfoSection() {
     }
   }, []);
 
+  const checkFastapi = useCallback(async () => {
+    setFastapiStatus("확인 중...");
+    try {
+      const res = await fetch("/api/health/fastapi", { cache: "no-store" });
+      const data: { healthy: boolean } = await res.json();
+      setFastapiStatus(data.healthy ? "연결됨" : "미연결");
+    } catch {
+      setFastapiStatus("미연결");
+    }
+  }, []);
+
   useEffect(() => {
     checkSupabase();
-  }, [checkSupabase]);
+    checkFastapi();
+  }, [checkSupabase, checkFastapi]);
 
-  const statusColor =
-    supabaseStatus === "연결됨"
-      ? "bg-green-500"
-      : supabaseStatus === "미연결"
-        ? "bg-red-400"
-        : "bg-yellow-400 animate-pulse";
+  const supabaseStatusColor = statusDotClass(supabaseStatus);
+  const fastapiStatusColor = statusDotClass(fastapiStatus);
 
   const systemInfo = {
     version: "0.1.0",
@@ -241,22 +263,22 @@ function SystemInfoSection() {
           <h4 className="text-sm font-medium text-gray-700">외부 서비스 상태</h4>
           <div className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
             <div className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${statusColor}`} />
+              <div className={`h-2 w-2 rounded-full ${supabaseStatusColor}`} />
               <span className="text-sm text-gray-700">Supabase (PostgreSQL + Auth)</span>
             </div>
             <span className="text-xs text-gray-400">{supabaseStatus}</span>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
             <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-gray-300" />
+              <div className={`h-2 w-2 rounded-full ${fastapiStatusColor}`} />
               <span className="text-sm text-gray-700">FastAPI (Orchestration Engine)</span>
             </div>
-            <span className="text-xs text-gray-400">미연결</span>
+            <span className="text-xs text-gray-400">{fastapiStatus}</span>
           </div>
         </div>
 
         <div className="mt-6 border-t border-gray-200 pt-4">
-          <Button variant="ghost" size="sm" onClick={checkSupabase}>
+          <Button variant="ghost" size="sm" onClick={() => { checkSupabase(); checkFastapi(); }}>
             <ExternalLink className="h-4 w-4" />
             시스템 헬스체크 실행
           </Button>

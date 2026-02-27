@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { FileText, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -77,8 +78,7 @@ export default function AuditLogsPage() {
       setLogs(json.data);
       setTotal(json.total);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "알 수 없는 에러";
-      console.error("[AuditLogsPage] fetchLogs 실패:", message);
+      Sentry.captureException(err, { tags: { context: "audit-logs.fetch" } });
     } finally {
       setIsLoading(false);
     }

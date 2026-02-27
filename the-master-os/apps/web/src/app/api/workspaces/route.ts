@@ -75,30 +75,35 @@ export async function GET(_request: NextRequest) {
       );
     }
 
+    // Batch: fire all per-workspace stat queries concurrently (eliminates sequential N+1)
     const workspacesWithStats = await Promise.all(
       (workspaces ?? []).map(async (ws) => {
-        // Agent count for this workspace
-        const { count: agentCount } = await supabase
-          .from('agent_assignments')
-          .select('*', { count: 'exact', head: true })
-          .eq('workspace_id', ws.id)
-          .eq('is_active', true)
-          .is('deleted_at', null);
-
-        // Active pipeline count
-        const { count: pipelineCount } = await supabase
-          .from('pipeline_executions')
-          .select('*', { count: 'exact', head: true })
-          .eq('workspace_id', ws.id)
-          .in('status', ['pending', 'running']);
-
-        // Credit balance (latest transaction)
-        const { data: creditData } = await supabase
-          .from('credits')
-          .select('balance_after')
-          .eq('workspace_id', ws.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
+        const [
+          { count: agentCount },
+          { count: pipelineCount },
+          { data: creditData },
+        ] = await Promise.all([
+          // Agent count for this workspace
+          supabase
+            .from('agent_assignments')
+            .select('*', { count: 'exact', head: true })
+            .eq('workspace_id', ws.id)
+            .eq('is_active', true)
+            .is('deleted_at', null),
+          // Active pipeline count
+          supabase
+            .from('pipeline_executions')
+            .select('*', { count: 'exact', head: true })
+            .eq('workspace_id', ws.id)
+            .in('status', ['pending', 'running']),
+          // Credit balance (latest transaction)
+          supabase
+            .from('credits')
+            .select('balance_after')
+            .eq('workspace_id', ws.id)
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ]);
 
         const settings = ws.settings as Record<string, unknown>;
 
