@@ -17,6 +17,7 @@ from app.mcp.base import MCPAuthenticationError, MCPClient, MCPExecutionError
 from app.mcp.firecrawl import FireCrawlClient
 from app.mcp.google_drive import GoogleDriveClient
 from app.mcp.paddleocr import PaddleOCRClient
+from app.mcp.resend import ResendClient
 from app.mcp.slack import SlackClient
 
 if TYPE_CHECKING:
@@ -27,11 +28,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Mapping from provider name → client constructor
-_CLIENT_FACTORIES: dict[str, type[FireCrawlClient | PaddleOCRClient | GoogleDriveClient | SlackClient]] = {
+_CLIENT_FACTORIES: dict[str, type[FireCrawlClient | PaddleOCRClient | GoogleDriveClient | SlackClient | ResendClient]] = {
     "firecrawl": FireCrawlClient,
     "paddleocr": PaddleOCRClient,
     "google_drive": GoogleDriveClient,
     "slack": SlackClient,
+    "resend": ResendClient,
 }
 
 
