@@ -3,19 +3,17 @@ import { test, expect } from '@playwright/test';
 test.describe('Agents', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/agents');
+    await page.waitForLoadState('domcontentloaded');
   });
 
-  test('renders agents page', async ({ page }) => {
+  test('renders agents page heading', async ({ page }) => {
     await expect(page).toHaveURL(/\/agents/);
-    await expect(page.getByRole('heading', { name: /agent/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '에이전트 풀' })).toBeVisible();
   });
 
-  test('agent list or cards are visible', async ({ page }) => {
-    await page.waitForLoadState('networkidle');
-    const agents = page.locator('[class*="agent"], [class*="Agent"], [data-testid*="agent"]');
-    const count = await agents.count();
-    // Page should render (even empty state is acceptable)
-    await expect(page.locator('body')).toBeVisible();
-    expect(count).toBeGreaterThanOrEqual(0);
+  test('agent cards are visible', async ({ page }) => {
+    // Agent cards with h3 headings for each agent name
+    const agentCards = page.locator('h3').first();
+    await expect(agentCards).toBeVisible({ timeout: 10_000 });
   });
 });

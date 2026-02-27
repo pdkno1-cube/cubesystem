@@ -10,7 +10,7 @@ test.describe('Marketing', () => {
   });
 
   test('calendar tab is active by default', async ({ page }) => {
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const calendarTab = page.getByRole('tab', { name: /calendar|캘린더/i });
     if (await calendarTab.isVisible()) {
       await expect(calendarTab).toHaveAttribute('aria-selected', 'true');
@@ -18,7 +18,7 @@ test.describe('Marketing', () => {
   });
 
   test('switches to analytics tab', async ({ page }) => {
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const analyticsTab = page.getByRole('tab', { name: /analytic|성과|분석/i });
     if (await analyticsTab.isVisible()) {
       await analyticsTab.click();
@@ -27,7 +27,7 @@ test.describe('Marketing', () => {
   });
 
   test('month navigation buttons are present', async ({ page }) => {
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const prevButton = page.getByRole('button', { name: /prev|이전|◀|←/i }).first();
     const nextButton = page.getByRole('button', { name: /next|다음|▶|→/i }).first();
     // At least one navigation control should be present for a calendar
