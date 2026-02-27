@@ -13,6 +13,11 @@ import {
   FileText,
   Settings,
   CalendarDays,
+  Gavel,
+  ClipboardCheck,
+  HeartPulse,
+  MessageSquare,
+  BookOpen,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -20,7 +25,12 @@ const NAV_ITEMS = [
   { href: "/workspaces", label: "워크스페이스", icon: Building2 },
   { href: "/agents", label: "에이전트", icon: Bot },
   { href: "/pipelines", label: "파이프라인", icon: GitBranch },
+  { href: "/grants", label: "조달입찰", icon: Gavel },
+  { href: "/documents", label: "문서검증", icon: ClipboardCheck },
+  { href: "/debates", label: "토론", icon: MessageSquare },
+  { href: "/business-plans", label: "사업계획서", icon: BookOpen },
   { href: "/marketing", label: "마케팅 캘린더", icon: CalendarDays },
+  { href: "/healing", label: "자동치유", icon: HeartPulse },
   { href: "/billing", label: "크레딧", icon: CreditCard },
   { href: "/vault", label: "시크릿 볼트", icon: Shield },
   { href: "/audit-logs", label: "감사 로그", icon: FileText },

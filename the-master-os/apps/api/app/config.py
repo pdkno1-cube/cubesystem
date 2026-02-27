@@ -41,8 +41,13 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
     supabase_jwt_secret: str
 
-    # --- Redis ---
+    # --- Redis / Celery ---
     redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = ""  # empty = Celery disabled (sync fallback)
+    celery_result_backend: str = ""  # defaults to celery_broker_url if empty
+
+    # --- Scheduler ---
+    enable_scheduler: bool = False  # vault rotation scheduler (ENABLE_SCHEDULER)
 
     # --- Sentry ---
     sentry_dsn: str = ""

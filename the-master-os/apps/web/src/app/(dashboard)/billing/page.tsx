@@ -9,6 +9,9 @@ import {
   Clock,
   Bot,
   Save,
+  CreditCard,
+  AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 import {
   LineChart,
@@ -37,6 +40,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { PlanCard } from "@/components/billing/PlanCard";
+import { BudgetAlertForm } from "@/components/billing/BudgetAlertForm";
+import { useToast } from "@/hooks/use-toast";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,6 +111,44 @@ interface CreditsData {
   credit_limits: CreditLimitInfo[];
 }
 
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  slug: string;
+  credits_per_month: number;
+  price_usd: number;
+  features: string[];
+  is_active: boolean;
+  created_at: string;
+}
+
+interface WorkspaceSubscription {
+  id: string;
+  workspace_id: string;
+  plan_id: string;
+  plan_name: string;
+  plan_slug: string;
+  credits_per_month: number;
+  price_usd: number;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  status: "active" | "cancelled" | "past_due" | "trialing";
+  current_period_start: string | null;
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BudgetAlert {
+  id: string;
+  workspace_id: string;
+  threshold_percent: number;
+  alert_type: "email" | "slack" | "both";
+  is_enabled: boolean;
+  last_triggered_at: string | null;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -155,8 +201,19 @@ function progressVariant(ratio: number): "default" | "warning" | "danger" {
   return "default";
 }
 
+function formatPeriodDate(iso: string | null): string {
+  if (!iso) {
+    return "-";
+  }
+  return new Date(iso).toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 // ---------------------------------------------------------------------------
-// Sub-components
+// Sub-components — Credit Dashboard
 // ---------------------------------------------------------------------------
 
 function KpiCards({ overview }: { overview: CreditOverview }) {
@@ -638,6 +695,237 @@ function CreditLimitSettings({
 }
 
 // ---------------------------------------------------------------------------
+// Sub-components — Subscription Management
+// ---------------------------------------------------------------------------
+
+function SubscriptionSection({
+  plans,
+  subscription,
+  creditLimits,
+  workspaceId,
+  onSubscriptionChanged,
+}: {
+  plans: SubscriptionPlan[];
+  subscription: WorkspaceSubscription | null;
+  creditLimits: CreditLimitInfo[];
+  workspaceId: string;
+  onSubscriptionChanged: () => void;
+}) {
+  const [upgradingSlug, setUpgradingSlug] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handleSelectPlan = useCallback(
+    async (slug: string) => {
+      setUpgradingSlug(slug);
+      try {
+        const res = await fetch("/api/billing/subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            plan_slug: slug,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`플랜 변경 실패: ${String(res.status)}`);
+        }
+
+        const json = (await res.json()) as { message: string };
+        toast({
+          title: "플랜 변경 완료",
+          description: json.message,
+          variant: "success",
+        });
+        onSubscriptionChanged();
+      } catch (err) {
+        Sentry.captureException(err, {
+          tags: { context: "billing.subscription.selectPlan" },
+        });
+        toast({
+          title: "플랜 변경 실패",
+          description: "잠시 후 다시 시도해주세요.",
+          variant: "error",
+        });
+      } finally {
+        setUpgradingSlug(null);
+      }
+    },
+    [workspaceId, toast, onSubscriptionChanged],
+  );
+
+  const currentSlug = subscription?.plan_slug ?? "free";
+
+  return (
+    <div className="space-y-6">
+      {/* Current subscription info */}
+      {subscription ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-brand-600" />
+              현재 구독
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <span className="text-xs font-medium text-gray-500">플랜</span>
+                <p className="mt-0.5 text-lg font-bold text-gray-900">
+                  {subscription.plan_name}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs font-medium text-gray-500">가격</span>
+                <p className="mt-0.5 text-lg font-bold text-gray-900">
+                  {subscription.price_usd === 0
+                    ? "무료"
+                    : `$${String(subscription.price_usd)}/월`}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs font-medium text-gray-500">
+                  크레딧/월
+                </span>
+                <p className="mt-0.5 text-lg font-bold text-gray-900">
+                  {subscription.credits_per_month < 0
+                    ? "무제한"
+                    : formatCredits(subscription.credits_per_month)}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs font-medium text-gray-500">
+                  갱신일
+                </span>
+                <p className="mt-0.5 text-lg font-bold text-gray-900">
+                  {formatPeriodDate(subscription.current_period_end)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Badge
+                variant={
+                  subscription.status === "active"
+                    ? "success"
+                    : subscription.status === "past_due"
+                      ? "danger"
+                      : subscription.status === "trialing"
+                        ? "info"
+                        : "warning"
+                }
+              >
+                {subscription.status === "active"
+                  ? "활성"
+                  : subscription.status === "cancelled"
+                    ? "취소됨"
+                    : subscription.status === "past_due"
+                      ? "결제 지연"
+                      : "체험중"}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Auto-stop warning banner */}
+      <AutoStopBanner creditLimits={creditLimits} />
+
+      {/* Plan cards */}
+      <div>
+        <h3 className="mb-4 text-lg font-semibold text-gray-900">
+          플랜 선택
+        </h3>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {plans.map((plan) => (
+            <PlanCard
+              key={plan.id}
+              name={plan.name}
+              slug={plan.slug}
+              priceUsd={plan.price_usd}
+              creditsPerMonth={plan.credits_per_month}
+              features={plan.features}
+              isCurrent={plan.slug === currentSlug}
+              isUpgrading={upgradingSlug === plan.slug}
+              onSelect={(slug) => {
+                void handleSelectPlan(slug);
+              }}
+            />
+          ))}
+        </div>
+        <p className="mt-4 text-center text-xs text-gray-400">
+          Stripe 결제 연동 준비중입니다. 현재는 시뮬레이션 모드로 동작합니다.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Auto-stop warning banner
+// ---------------------------------------------------------------------------
+
+function AutoStopBanner({
+  creditLimits,
+}: {
+  creditLimits: CreditLimitInfo[];
+}) {
+  // Find workspaces with auto_stop enabled and usage above threshold
+  const overLimitWorkspaces = creditLimits.filter((lim) => {
+    if (!lim.auto_stop || lim.monthly_limit <= 0) {
+      return false;
+    }
+    return lim.usage_ratio >= 80;
+  });
+
+  if (overLimitWorkspaces.length === 0) {
+    return null;
+  }
+
+  const hasCritical = overLimitWorkspaces.some((ws) => ws.usage_ratio >= 100);
+
+  return (
+    <div
+      className={`flex items-start gap-3 rounded-lg border p-4 ${
+        hasCritical
+          ? "border-red-200 bg-red-50"
+          : "border-amber-200 bg-amber-50"
+      }`}
+    >
+      {hasCritical ? (
+        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+      ) : (
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+      )}
+      <div>
+        <h4
+          className={`text-sm font-semibold ${
+            hasCritical ? "text-red-800" : "text-amber-800"
+          }`}
+        >
+          {hasCritical
+            ? "자동 정지 경고: 크레딧 한도 초과"
+            : "예산 경고: 크레딧 사용률 80% 이상"}
+        </h4>
+        <ul className="mt-1 space-y-0.5">
+          {overLimitWorkspaces.map((ws) => (
+            <li
+              key={ws.workspace_id}
+              className={`text-xs ${
+                hasCritical ? "text-red-700" : "text-amber-700"
+              }`}
+            >
+              {ws.workspace_name}: {String(Math.round(ws.usage_ratio))}% 사용
+              ({formatCredits(ws.month_used)} / {formatCredits(ws.monthly_limit)})
+              {ws.usage_ratio >= 100 ? " — 자동 정지됨" : ""}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Loading skeleton
 // ---------------------------------------------------------------------------
 
@@ -682,7 +970,27 @@ function BillingPageSkeleton() {
 
 export default function BillingPage() {
   const [data, setData] = useState<CreditsData | null>(null);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
+  const [budgetAlert, setBudgetAlert] = useState<BudgetAlert | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Derive primary workspace from credit_limits or workspace_usage
+  const getPrimaryWorkspaceId = useCallback((): string | null => {
+    if (data?.credit_limits && data.credit_limits.length > 0) {
+      const firstLimit = data.credit_limits[0];
+      if (firstLimit) {
+        return firstLimit.workspace_id;
+      }
+    }
+    if (data?.workspace_usage && data.workspace_usage.length > 0) {
+      const firstUsage = data.workspace_usage[0];
+      if (firstUsage) {
+        return firstUsage.workspace_id;
+      }
+    }
+    return null;
+  }, [data]);
 
   const fetchCredits = useCallback(async () => {
     try {
@@ -692,16 +1000,100 @@ export default function BillingPage() {
       }
       const json: CreditsData = (await res.json()) as CreditsData;
       setData(json);
+      return json;
     } catch (err) {
       Sentry.captureException(err, { tags: { context: "billing.fetch" } });
-    } finally {
-      setIsLoading(false);
+      return null;
     }
   }, []);
 
+  const fetchPlans = useCallback(async () => {
+    try {
+      const res = await fetch("/api/billing/plans");
+      if (!res.ok) {
+        throw new Error(`플랜 조회 실패: ${String(res.status)}`);
+      }
+      const json = (await res.json()) as { plans: SubscriptionPlan[] };
+      setPlans(json.plans);
+    } catch (err) {
+      Sentry.captureException(err, { tags: { context: "billing.fetchPlans" } });
+    }
+  }, []);
+
+  const fetchSubscription = useCallback(
+    async (workspaceId: string) => {
+      try {
+        const res = await fetch(
+          `/api/billing/subscription?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) {
+          throw new Error(`구독 조회 실패: ${String(res.status)}`);
+        }
+        const json = (await res.json()) as {
+          subscription: WorkspaceSubscription | null;
+        };
+        setSubscription(json.subscription);
+      } catch (err) {
+        Sentry.captureException(err, {
+          tags: { context: "billing.fetchSubscription" },
+        });
+      }
+    },
+    [],
+  );
+
+  const fetchBudgetAlert = useCallback(async (workspaceId: string) => {
+    try {
+      const res = await fetch(
+        `/api/billing/alerts?workspace_id=${encodeURIComponent(workspaceId)}`,
+      );
+      if (!res.ok) {
+        throw new Error(`알림 설정 조회 실패: ${String(res.status)}`);
+      }
+      const json = (await res.json()) as { alert: BudgetAlert | null };
+      setBudgetAlert(json.alert);
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { context: "billing.fetchBudgetAlert" },
+      });
+    }
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [creditsResult] = await Promise.all([fetchCredits(), fetchPlans()]);
+
+      // Derive workspace id from credits data
+      let wsId: string | null = null;
+      if (creditsResult?.credit_limits && creditsResult.credit_limits.length > 0) {
+        const firstLimit = creditsResult.credit_limits[0];
+        if (firstLimit) {
+          wsId = firstLimit.workspace_id;
+        }
+      }
+      if (!wsId && creditsResult?.workspace_usage && creditsResult.workspace_usage.length > 0) {
+        const firstUsage = creditsResult.workspace_usage[0];
+        if (firstUsage) {
+          wsId = firstUsage.workspace_id;
+        }
+      }
+
+      if (wsId) {
+        await Promise.all([fetchSubscription(wsId), fetchBudgetAlert(wsId)]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchCredits, fetchPlans, fetchSubscription, fetchBudgetAlert]);
+
   useEffect(() => {
-    void fetchCredits();
-  }, [fetchCredits]);
+    void loadAll();
+  }, [loadAll]);
+
+  const handleRefresh = useCallback(() => {
+    void loadAll();
+  }, [loadAll]);
 
   if (isLoading) {
     return <BillingPageSkeleton />;
@@ -726,38 +1118,180 @@ export default function BillingPage() {
     credit_limits,
   } = data;
 
+  const primaryWorkspaceId = getPrimaryWorkspaceId();
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900">크레딧 / 과금</h2>
         <p className="mt-1 text-gray-500">
-          마스터 크레딧 사용량과 비용을 추적합니다
+          마스터 크레딧 사용량, 구독 관리, 예산 알림을 한곳에서 관리합니다
         </p>
       </div>
 
-      {/* KPI Cards (4) */}
-      <KpiCards overview={overview} />
+      {/* Tabs */}
+      <Tabs defaultValue="credits">
+        <TabsList>
+          <TabsTrigger value="credits">크레딧 대시보드</TabsTrigger>
+          <TabsTrigger value="subscription">구독 관리</TabsTrigger>
+          <TabsTrigger value="alerts">예산 알림</TabsTrigger>
+        </TabsList>
 
-      {/* Charts Row: Daily Usage Trend + Workspace Bar Chart */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <DailyUsageChart data={daily_usage} />
-        <WorkspaceUsageBarChart data={workspace_usage} />
-      </div>
+        {/* ====== Tab 1: Credits Dashboard ====== */}
+        <TabsContent value="credits">
+          <div className="space-y-8 pt-4">
+            {/* KPI Cards (4) */}
+            <KpiCards overview={overview} />
 
-      {/* Agent Usage Top 10 + Credit Limit Settings */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <AgentUsageTable data={agent_usage_top10} />
-        <CreditLimitSettings
-          initialLimits={credit_limits}
-          onSaved={() => {
-            void fetchCredits();
-          }}
-        />
-      </div>
+            {/* Auto-stop warning */}
+            <AutoStopBanner creditLimits={credit_limits} />
 
-      {/* Transaction History */}
-      <TransactionHistory transactions={recent_transactions} />
+            {/* Charts Row: Daily Usage Trend + Workspace Bar Chart */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              <DailyUsageChart data={daily_usage} />
+              <WorkspaceUsageBarChart data={workspace_usage} />
+            </div>
+
+            {/* Agent Usage Top 10 + Credit Limit Settings */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              <AgentUsageTable data={agent_usage_top10} />
+              <CreditLimitSettings
+                initialLimits={credit_limits}
+                onSaved={handleRefresh}
+              />
+            </div>
+
+            {/* Transaction History */}
+            <TransactionHistory transactions={recent_transactions} />
+          </div>
+        </TabsContent>
+
+        {/* ====== Tab 2: Subscription Management ====== */}
+        <TabsContent value="subscription">
+          <div className="pt-4">
+            <SubscriptionSection
+              plans={plans}
+              subscription={subscription}
+              creditLimits={credit_limits}
+              workspaceId={primaryWorkspaceId ?? ""}
+              onSubscriptionChanged={handleRefresh}
+            />
+          </div>
+        </TabsContent>
+
+        {/* ====== Tab 3: Budget Alerts ====== */}
+        <TabsContent value="alerts">
+          <div className="pt-4">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Budget Alert Form */}
+              {primaryWorkspaceId ? (
+                <BudgetAlertForm
+                  workspaceId={primaryWorkspaceId}
+                  initialAlert={budgetAlert}
+                  onSaved={handleRefresh}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="py-8">
+                    <p className="text-center text-sm text-gray-400">
+                      워크스페이스가 없어 알림을 설정할 수 없습니다.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Auto-stop status summary */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-red-500" />
+                    자동 정지 상태
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {credit_limits.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-gray-400">
+                      워크스페이스 크레딧 한도를 먼저 설정해주세요.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {credit_limits.map((lim) => {
+                        const limitNum = lim.monthly_limit;
+                        const ratio =
+                          limitNum > 0
+                            ? Math.round((lim.month_used / limitNum) * 10000) / 100
+                            : 0;
+                        const isOverLimit = lim.auto_stop && ratio >= 100;
+                        const isWarning = lim.auto_stop && ratio >= 80 && ratio < 100;
+
+                        return (
+                          <div
+                            key={lim.workspace_id}
+                            className={`rounded-lg border p-3 ${
+                              isOverLimit
+                                ? "border-red-200 bg-red-50"
+                                : isWarning
+                                  ? "border-amber-200 bg-amber-50"
+                                  : "border-gray-100 bg-gray-50/50"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-semibold text-gray-800">
+                                {lim.workspace_name}
+                              </h4>
+                              <div className="flex items-center gap-2">
+                                <Badge
+                                  variant={
+                                    isOverLimit
+                                      ? "danger"
+                                      : isWarning
+                                        ? "warning"
+                                        : lim.auto_stop
+                                          ? "success"
+                                          : "default"
+                                  }
+                                >
+                                  {isOverLimit
+                                    ? "정지됨"
+                                    : isWarning
+                                      ? "경고"
+                                      : lim.auto_stop
+                                        ? "자동 정지 활성"
+                                        : "자동 정지 비활성"}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+                                <span>
+                                  {formatCredits(lim.month_used)} /{" "}
+                                  {limitNum > 0
+                                    ? formatCredits(limitNum)
+                                    : "무제한"}
+                                </span>
+                                <span>
+                                  {limitNum > 0
+                                    ? `${String(ratio)}%`
+                                    : "-"}
+                                </span>
+                              </div>
+                              <Progress
+                                value={limitNum > 0 ? Math.min(ratio, 100) : 0}
+                                variant={progressVariant(ratio)}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Loader2,
 } from 'lucide-react';
+import { AgentScorecard } from './AgentScorecard';
 import { cn } from '@/lib/utils';
 import { useAgentStore } from '@/stores/agent-store';
 import type { Database } from '@/types/database';
@@ -443,6 +444,9 @@ export function AgentDetailPanel({
             </div>
           )}
         </div>
+
+        {/* Scorecard */}
+        <AgentScorecard agentId={agent.id} />
 
         {/* Metadata */}
         <div className="px-6 py-4">

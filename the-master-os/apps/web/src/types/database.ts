@@ -772,6 +772,227 @@ export interface Database {
           },
         ];
       };
+      business_plans: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          title: string;
+          industry: string;
+          target_market: string;
+          status: 'draft' | 'generating' | 'completed' | 'exported';
+          company_name: string;
+          company_description: string;
+          tam_value: number;
+          sam_value: number;
+          som_value: number;
+          competitors: Record<string, unknown>[];
+          sections: Record<string, unknown>;
+          generated_at: string | null;
+          exported_at: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          title: string;
+          industry: string;
+          target_market: string;
+          status?: 'draft' | 'generating' | 'completed' | 'exported';
+          company_name: string;
+          company_description?: string;
+          tam_value?: number;
+          sam_value?: number;
+          som_value?: number;
+          competitors?: Record<string, unknown>[];
+          sections?: Record<string, unknown>;
+          generated_at?: string | null;
+          exported_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          title?: string;
+          industry?: string;
+          target_market?: string;
+          status?: 'draft' | 'generating' | 'completed' | 'exported';
+          company_name?: string;
+          company_description?: string;
+          tam_value?: number;
+          sam_value?: number;
+          som_value?: number;
+          competitors?: Record<string, unknown>[];
+          sections?: Record<string, unknown>;
+          generated_at?: string | null;
+          exported_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'business_plans_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      tender_submissions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          pipeline_execution_id: string | null;
+          tender_id: string;
+          tender_title: string;
+          tender_url: string | null;
+          organization: string | null;
+          status:
+            | 'draft'
+            | 'crawled'
+            | 'eligible'
+            | 'reviewing'
+            | 'docs_ready'
+            | 'submitted'
+            | 'won'
+            | 'lost';
+          bid_amount: number | null;
+          deadline: string | null;
+          documents: Record<string, unknown>[];
+          metadata: Record<string, unknown>;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          pipeline_execution_id?: string | null;
+          tender_id: string;
+          tender_title: string;
+          tender_url?: string | null;
+          organization?: string | null;
+          status?:
+            | 'draft'
+            | 'crawled'
+            | 'eligible'
+            | 'reviewing'
+            | 'docs_ready'
+            | 'submitted'
+            | 'won'
+            | 'lost';
+          bid_amount?: number | null;
+          deadline?: string | null;
+          documents?: Record<string, unknown>[];
+          metadata?: Record<string, unknown>;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          pipeline_execution_id?: string | null;
+          tender_id?: string;
+          tender_title?: string;
+          tender_url?: string | null;
+          organization?: string | null;
+          status?:
+            | 'draft'
+            | 'crawled'
+            | 'eligible'
+            | 'reviewing'
+            | 'docs_ready'
+            | 'submitted'
+            | 'won'
+            | 'lost';
+          bid_amount?: number | null;
+          deadline?: string | null;
+          documents?: Record<string, unknown>[];
+          metadata?: Record<string, unknown>;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'tender_submissions_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'tender_submissions_pipeline_execution_id_fkey';
+            columns: ['pipeline_execution_id'];
+            isOneToOne: false;
+            referencedRelation: 'pipeline_executions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      document_reviews: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          pipeline_execution_id: string | null;
+          document_name: string;
+          document_type: string;
+          file_url: string | null;
+          status: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'archived';
+          issues: Record<string, unknown>[];
+          reviewer_notes: string | null;
+          gdrive_file_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          pipeline_execution_id?: string | null;
+          document_name: string;
+          document_type?: string;
+          file_url?: string | null;
+          status?: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'archived';
+          issues?: Record<string, unknown>[];
+          reviewer_notes?: string | null;
+          gdrive_file_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          pipeline_execution_id?: string | null;
+          document_name?: string;
+          document_type?: string;
+          file_url?: string | null;
+          status?: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'archived';
+          issues?: Record<string, unknown>[];
+          reviewer_notes?: string | null;
+          gdrive_file_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'document_reviews_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'document_reviews_pipeline_execution_id_fkey';
+            columns: ['pipeline_execution_id'];
+            isOneToOne: false;
+            referencedRelation: 'pipeline_executions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       audit_logs: {
         Row: {
           id: string;
