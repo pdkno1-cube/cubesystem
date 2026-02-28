@@ -27,7 +27,7 @@ import {
   type AgentNodeType,
   type PipelineNodeType,
 } from './canvas-nodes';
-import type { WorkspaceOverview, CanvasAgent, CanvasPipeline } from './types';
+import type { WorkspaceOverview, CanvasAgent } from './types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const POOL_NODE_ID = 'agent-pool';
