@@ -1669,6 +1669,117 @@ export interface Database {
           },
         ];
       };
+      agent_tasks: {
+        Row: {
+          id: string;
+          agent_id: string;
+          workspace_id: string | null;
+          conversation_id: string | null;
+          input_text: string;
+          output_text: string | null;
+          status: 'pending' | 'running' | 'done' | 'error';
+          tokens_input: number;
+          tokens_output: number;
+          cost_usd: number;
+          duration_ms: number | null;
+          error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          workspace_id?: string | null;
+          conversation_id?: string | null;
+          input_text: string;
+          output_text?: string | null;
+          status?: 'pending' | 'running' | 'done' | 'error';
+          tokens_input?: number;
+          tokens_output?: number;
+          cost_usd?: number;
+          duration_ms?: number | null;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          workspace_id?: string | null;
+          conversation_id?: string | null;
+          input_text?: string;
+          output_text?: string | null;
+          status?: 'pending' | 'running' | 'done' | 'error';
+          tokens_input?: number;
+          tokens_output?: number;
+          cost_usd?: number;
+          duration_ms?: number | null;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_conversations: {
+        Row: {
+          id: string;
+          agent_id: string;
+          workspace_id: string | null;
+          title: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          workspace_id?: string | null;
+          title?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          workspace_id?: string | null;
+          title?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_runs: {
+        Row: {
+          id: string;
+          workspace_id: string | null;
+          mode: 'single' | 'sequential' | 'parallel' | 'debate' | 'supervisor';
+          status: 'pending' | 'running' | 'done' | 'error';
+          input_text: string | null;
+          result_summary: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id?: string | null;
+          mode?: 'single' | 'sequential' | 'parallel' | 'debate' | 'supervisor';
+          status?: 'pending' | 'running' | 'done' | 'error';
+          input_text?: string | null;
+          result_summary?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string | null;
+          mode?: 'single' | 'sequential' | 'parallel' | 'debate' | 'supervisor';
+          status?: 'pending' | 'running' | 'done' | 'error';
+          input_text?: string | null;
+          result_summary?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1723,4 +1834,7 @@ export type WorkspaceInsert = Tables['workspaces']['Insert'];
 export type McpConnectionInsert = Tables['mcp_connections']['Insert'];
 export type ContentScheduleInsert = Tables['content_schedules']['Insert'];
 export type NewsletterSubscriberInsert = Tables['newsletter_subscribers']['Insert'];
+export type AgentTaskRow = Tables['agent_tasks']['Row'];
+export type AgentConversationRow = Tables['agent_conversations']['Row'];
+export type AgentRunRow = Tables['agent_runs']['Row'];
 export type ContentMetricInsert = Tables['content_metrics']['Insert'];

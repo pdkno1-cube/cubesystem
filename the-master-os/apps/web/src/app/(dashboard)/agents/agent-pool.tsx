@@ -9,6 +9,7 @@ import { AssignAgentDialog } from './assign-agent-dialog';
 import { PromptEditorDialog } from './prompt-editor-dialog';
 import { SwarmTemplateDialog } from '@/components/agents/SwarmTemplateDialog';
 import { AgentDetailPanel } from '@/components/agents/AgentDetailPanel';
+import { AgentExecutePanel } from '@/components/agents/AgentExecutePanel';
 import { PageHero } from '@/components/ui/PageHero';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
@@ -99,6 +100,7 @@ export function AgentPoolClient({
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentWithAssignment | null>(null);
   const [promptEditorAgent, setPromptEditorAgent] = useState<AgentWithAssignment | null>(null);
+  const [executeAgent, setExecuteAgent] = useState<AgentWithAssignment | null>(null);
 
   // Initialize store with server-fetched data
   useEffect(() => {
@@ -182,6 +184,10 @@ export function AgentPoolClient({
 
   const handleEditPrompt = useCallback((agent: AgentWithAssignment) => {
     setPromptEditorAgent(agent);
+  }, []);
+
+  const handleExecute = useCallback((agent: AgentWithAssignment) => {
+    setExecuteAgent(agent);
   }, []);
 
   const handlePromptSaved = useCallback(() => {
@@ -299,7 +305,7 @@ export function AgentPoolClient({
       <div
         className={cn(
           'transition-all duration-300',
-          selectedAgent ? 'mr-[420px]' : ''
+          selectedAgent || executeAgent ? 'mr-[480px]' : ''
         )}
       >
         {filteredAgents.length === 0 ? (
@@ -339,6 +345,7 @@ export function AgentPoolClient({
                 onDelete={handleDelete}
                 onSelect={handleSelectAgent}
                 onEditPrompt={handleEditPrompt}
+                onExecute={handleExecute}
               />
             ))}
           </div>
@@ -353,6 +360,16 @@ export function AgentPoolClient({
           onClose={handleDetailClose}
           onAssigned={handleDetailAssigned}
           onReleased={handleDetailReleased}
+          onExecute={handleExecute}
+        />
+      ) : null}
+
+      {/* Execute Panel */}
+      {executeAgent ? (
+        <AgentExecutePanel
+          agent={executeAgent}
+          workspaces={workspaces}
+          onClose={() => { setExecuteAgent(null); }}
         />
       ) : null}
 

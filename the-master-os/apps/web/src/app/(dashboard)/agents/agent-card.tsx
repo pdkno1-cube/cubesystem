@@ -9,6 +9,7 @@ import {
   Eye,
   Building2,
   Braces,
+  Zap,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ interface AgentCardProps {
   onDelete: (agentId: string) => void;
   onSelect: (agent: AgentWithAssignment) => void;
   onEditPrompt: (agent: AgentWithAssignment) => void;
+  onExecute?: (agent: AgentWithAssignment) => void;
 }
 
 const CATEGORY_CONFIG: Record<
@@ -156,6 +158,7 @@ export function AgentCard({
   onDelete,
   onSelect,
   onEditPrompt,
+  onExecute,
 }: AgentCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -244,6 +247,19 @@ export function AgentCard({
                 프롬프트 편집
               </DropdownMenu.Item>
 
+              {onExecute && (
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-violet-700 outline-none hover:bg-violet-50"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onExecute(agent);
+                  }}
+                >
+                  <Zap className="h-4 w-4" />
+                  실행
+                </DropdownMenu.Item>
+              )}
+
               {poolStatus === 'pool' ? (
                 <DropdownMenu.Item
                   className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
@@ -325,6 +341,20 @@ export function AgentCard({
 
       {/* Quick action buttons */}
       <div className="mt-3 flex gap-2">
+        {/* Execute button */}
+        {onExecute && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onExecute(agent);
+            }}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-100"
+          >
+            <Zap className="h-3 w-3" />
+            실행
+          </button>
+        )}
         {poolStatus === 'pool' ? (
           <button
             type="button"

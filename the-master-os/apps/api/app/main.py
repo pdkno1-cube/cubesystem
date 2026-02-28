@@ -27,7 +27,7 @@ from app.middleware.audit_logger import AuditLogMiddleware
 from app.middleware.rate_limiter import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.pipeline import PipelineEngine
-from app.routers import agents, auto_healing, business_plans, debates, document_validation, grant_factory, health, marketing, mcp_hub, pipelines
+from app.routers import agents, agent_execute, auto_healing, business_plans, debates, document_validation, grant_factory, health, marketing, mcp_hub, pipelines
 from app.scheduler import init_health_monitor, init_vault_scheduler, shutdown_health_monitor, shutdown_vault_scheduler
 from app.services.scheduler import ContentScheduler
 from app.ws import ConnectionManager, ws_router
@@ -255,6 +255,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(pipelines.router)
     app.include_router(agents.router)
+    app.include_router(agent_execute.router)
     app.include_router(marketing.router)
     app.include_router(mcp_hub.router)
     app.include_router(auto_healing.router)

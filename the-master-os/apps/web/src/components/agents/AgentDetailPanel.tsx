@@ -12,6 +12,7 @@ import {
   CreditCard,
   ChevronDown,
   Loader2,
+  Zap,
 } from 'lucide-react';
 import { AgentScorecard } from './AgentScorecard';
 import { cn } from '@/lib/utils';
@@ -129,6 +130,7 @@ interface AgentDetailPanelProps {
   onClose: () => void;
   onAssigned: () => void;
   onReleased: () => void;
+  onExecute?: (agent: AgentWithAssignment) => void;
 }
 
 export function AgentDetailPanel({
@@ -137,6 +139,7 @@ export function AgentDetailPanel({
   onClose,
   onAssigned,
   onReleased,
+  onExecute,
 }: AgentDetailPanelProps) {
   const { assignAgent, releaseAgent } = useAgentStore();
 
@@ -245,13 +248,25 @@ export function AgentDetailPanel({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <h2 className="text-lg font-semibold text-gray-900">에이전트 상세</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {onExecute && (
+            <button
+              type="button"
+              onClick={() => { onExecute(agent); }}
+              className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-700"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              실행
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
