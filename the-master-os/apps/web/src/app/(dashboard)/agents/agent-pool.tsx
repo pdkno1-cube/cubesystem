@@ -9,6 +9,7 @@ import { AssignAgentDialog } from './assign-agent-dialog';
 import { PromptEditorDialog } from './prompt-editor-dialog';
 import { SwarmTemplateDialog } from '@/components/agents/SwarmTemplateDialog';
 import { AgentDetailPanel } from '@/components/agents/AgentDetailPanel';
+import { PageHero } from '@/components/ui/PageHero';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 
@@ -204,32 +205,37 @@ export function AgentPoolClient({
 
   return (
     <div className="animate-fade-in space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">에이전트 풀</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            총 {displayAgents.length}개 에이전트
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsSwarmOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            <Users className="h-4 w-4" />
-            스웜 템플릿
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-700"
-          >
-            <Plus className="h-4 w-4" />
-            에이전트 등록
-          </button>
-        </div>
+      {/* Hero */}
+      <PageHero
+        badge="에이전트 관리"
+        title="에이전트 풀"
+        subtitle="AI 에이전트를 생성하고 법인에 배정합니다"
+        variant="purple"
+        stats={[
+          { label: '전체', value: displayAgents.length },
+          { label: '가동중', value: statusCounts.active },
+          { label: '미배정', value: statusCounts.pool },
+        ]}
+      />
+
+      {/* Action Buttons */}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setIsSwarmOpen(true)}
+          className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+        >
+          <Users className="h-4 w-4" />
+          스웜 템플릿
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsCreateOpen(true)}
+          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-700"
+        >
+          <Plus className="h-4 w-4" />
+          에이전트 등록
+        </button>
       </div>
 
       {/* Status Filter Tabs */}

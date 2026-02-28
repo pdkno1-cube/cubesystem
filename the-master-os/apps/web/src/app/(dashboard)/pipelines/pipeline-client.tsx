@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { PipelineCard } from './pipeline-card';
 import { StartDialog } from './start-dialog';
 import { ExecutionPanel } from './execution-panel';
+import { PageHero } from '@/components/ui/PageHero';
 import type { PipelineWithMeta } from './page';
 
 // ---------------------------------------------------------------------------
@@ -123,16 +124,15 @@ export function PipelineClient({
   const isExecuting = executionStore.status === 'running';
 
   return (
-    <div>
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">파이프라인</h2>
-          <p className="mt-1 text-gray-500">
-            4대 핵심 파이프라인을 실행하고 진행 상황을 모니터링합니다
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6">
+      {/* Hero */}
+      <PageHero
+        badge="파이프라인 관리"
+        title="파이프라인"
+        subtitle="AI 워크플로우를 실행하고 모니터링합니다"
+        variant="amber"
+        stats={[{ label: '파이프라인', value: pipelines.length }]}
+      />
 
       {/* Pipeline cards grid */}
       {pipelines.length === 0 ? (
@@ -142,7 +142,7 @@ export function PipelineClient({
           description="파이프라인을 생성하여 에이전트 워크플로우를 자동화하세요."
         />
       ) : (
-        <div className="mt-6 grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {pipelines.map((pipeline) => (
             <PipelineCard
               key={pipeline.id}

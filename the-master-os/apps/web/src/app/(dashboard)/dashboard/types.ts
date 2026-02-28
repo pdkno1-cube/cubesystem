@@ -1,3 +1,11 @@
+export interface CanvasAgent {
+  id: string;
+  name: string;
+  model: string;
+  category: string;
+  status: 'idle' | 'running' | 'paused' | 'error';
+}
+
 export interface WorkspaceOverview {
   id: string;
   name: string;
@@ -13,6 +21,7 @@ export interface WorkspaceOverview {
   pipeline_completed: number;
   pipeline_error: number;
   credit_balance: number;
+  assigned_agents?: CanvasAgent[];
 }
 
 export interface PipelineExecution {

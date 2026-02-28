@@ -7,6 +7,7 @@ interface AgentBasic {
   id: string;
   name: string;
   category: string;
+  model: string | null;
   is_active: boolean;
 }
 
@@ -141,7 +142,7 @@ export default async function DashboardPage() {
 
       supabase
         .from('agents')
-        .select('id, name, category, is_active'),
+        .select('id, name, category, model, is_active'),
 
       supabase
         .from('agent_assignments')
@@ -285,6 +286,22 @@ export default async function DashboardPage() {
         pipeline_completed: pStats.completed,
         pipeline_error: pStats.error,
         credit_balance: latestBalances.get(ws.id) ?? 0,
+        assigned_agents: (wsAssignments
+          .map((a) => {
+            const agent = agents.find((ag) => ag.id === a.agent_id);
+            if (!agent) { return null; }
+            return {
+              id: agent.id,
+              name: agent.name,
+              model: agent.model ?? 'claude-sonnet-4-6',
+              category: agent.category,
+              status: (a.status === 'running' ? 'running'
+                : a.status === 'idle' ? 'idle'
+                : a.status === 'paused' ? 'paused'
+                : 'error') as 'idle' | 'running' | 'paused' | 'error',
+            };
+          })
+          .filter((x): x is NonNullable<typeof x> => x !== null)),
       };
     });
 

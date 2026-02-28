@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { WorkspaceCard } from './workspace-card';
 import { CreateWorkspaceDialog } from './create-workspace-dialog';
+import { PageHero } from '@/components/ui/PageHero';
 import type { WorkspaceWithStats } from '@/types/workspace';
 import { cn } from '@/lib/utils';
 
@@ -52,15 +53,19 @@ export function WorkspaceListClient({
 
   return (
     <div className="space-y-6">
-      {/* Header Row */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">워크스페이스</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            법인 워크스페이스를 생성하고 관리합니다
-          </p>
-        </div>
+      {/* Hero */}
+      <PageHero
+        badge="워크스페이스 관리"
+        title="워크스페이스"
+        subtitle="법인 워크스페이스를 생성하고 관리합니다"
+        variant="indigo"
+        stats={[
+          { label: '전체', value: displayedWorkspaces.length },
+        ]}
+      />
 
+      {/* Controls Row */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* Archived Toggle */}
           <button
@@ -107,13 +112,13 @@ export function WorkspaceListClient({
               <List className="h-4 w-4" />
             </button>
           </div>
-
-          {/* Create Button */}
-          <Button onClick={() => { setIsCreateOpen(true); }}>
-            <Plus className="h-4 w-4" />
-            새 법인 생성
-          </Button>
         </div>
+
+        {/* Create Button */}
+        <Button onClick={() => { setIsCreateOpen(true); }}>
+          <Plus className="h-4 w-4" />
+          새 법인 생성
+        </Button>
       </div>
 
       {/* Content */}
