@@ -68,5 +68,6 @@ worker_app.worker_main(
         "-Q", "default,pipelines,notifications,monitoring,maintenance",
         "-B",
         "--concurrency=2",
+        "--schedule=/tmp/celerybeat-schedule",
     ]
 )
