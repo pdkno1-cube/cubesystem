@@ -37,6 +37,8 @@ _MODEL_PRICING: dict[str, tuple[float, float]] = {
     "gpt-4-turbo": (10.00, 30.00),
     "gpt-3.5-turbo": (0.50, 1.50),
     # Google Gemini
+    "gemini-2.5-pro": (1.25, 10.00),
+    "gemini-2.5-flash": (0.15, 0.60),
     "gemini-2.0-flash": (0.075, 0.30),
     "gemini-2.0-flash-lite": (0.0375, 0.15),
     "gemini-1.5-pro": (1.25, 5.00),
@@ -46,8 +48,8 @@ _MODEL_PRICING: dict[str, tuple[float, float]] = {
 
 # Map of short model aliases → full Gemini model names
 _GEMINI_MODEL_MAP: dict[str, str] = {
-    "gemini-pro": "gemini-1.5-pro",
-    "gemini-flash": "gemini-2.0-flash",
+    "gemini-pro": "gemini-2.5-pro",
+    "gemini-flash": "gemini-2.5-flash",
     "gemini-flash-lite": "gemini-2.0-flash-lite",
 }
 

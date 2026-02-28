@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import * as Sentry from '@sentry/nextjs';
-import { ChevronLeft, ChevronRight, Loader2, CalendarDays, BarChart3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, CalendarDays, BarChart3, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import { CalendarGrid } from '@/components/marketing/CalendarGrid';
 import { ContentPreviewSlider } from '@/components/marketing/ContentPreviewSlider';
@@ -14,6 +14,7 @@ import {
   CHANNEL_COLORS,
   STATUS_LABELS,
 } from '@/stores/marketingStore';
+import { MediaGeneratorDialog } from '@/components/marketing/MediaGeneratorDialog';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -166,6 +167,7 @@ export function MarketingClient({
   } = useMarketingStore();
 
   const [isRefetching, setIsRefetching] = useState(false);
+  const [isMediaDialogOpen, setIsMediaDialogOpen] = useState(false);
 
   // Initialise store on mount
   useEffect(() => {
@@ -338,7 +340,15 @@ export function MarketingClient({
             OSMU 마케팅 파이프라인 콘텐츠 발행 일정 및 성과를 관리합니다
           </p>
         </div>
-        <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsMediaDialogOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:from-violet-700 hover:to-indigo-700"
+          >
+            <Sparkles className="h-4 w-4" />
+            AI 미디어 생성
+          </button>
+          <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -358,8 +368,15 @@ export function MarketingClient({
               </button>
             );
           })}
+          </div>
         </div>
       </div>
+
+      {/* Media generator dialog */}
+      <MediaGeneratorDialog
+        open={isMediaDialogOpen}
+        onClose={() => setIsMediaDialogOpen(false)}
+      />
 
       {/* Tab content */}
       {activeTab === 'analytics' ? (
