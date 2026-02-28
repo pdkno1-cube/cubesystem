@@ -39,6 +39,9 @@ COPY --from=builder /build/venv /app/venv
 # Copy application code
 COPY app/ /app/app/
 
+# Copy Celery worker entry point (required for `celery -A celery_worker.celery_app`)
+COPY celery_worker.py /app/celery_worker.py
+
 # Set PATH so the venv python is used
 ENV PATH="/app/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
