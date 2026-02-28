@@ -41,6 +41,7 @@ export interface WorkspaceNodeData extends Record<string, unknown> {
   pipelineCompleted: number;
   isActive: boolean;
   onAddAgent: (wsId: string) => void;
+  onAddPipeline: (wsId: string) => void;
 }
 export type WorkspaceNodeType = Node<WorkspaceNodeData, 'workspace'>;
 
@@ -59,14 +60,24 @@ function WorkspaceNodeComponent({ data, selected }: NodeProps<WorkspaceNodeType>
             <span className="text-xl">🏢</span>
             <span className="text-sm font-bold text-white truncate max-w-[160px]">{data.label}</span>
           </div>
-          <button
-            type="button"
-            className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white transition-colors hover:bg-white/30"
-            onClick={(e) => { e.stopPropagation(); data.onAddAgent(data.wsId); }}
-            title="에이전트 배정"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white transition-colors hover:bg-white/30"
+              onClick={(e) => { e.stopPropagation(); data.onAddAgent(data.wsId); }}
+              title="에이전트 배정"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white transition-colors hover:bg-white/30"
+              onClick={(e) => { e.stopPropagation(); data.onAddPipeline(data.wsId); }}
+              title="파이프라인 추가"
+            >
+              <GitBranch className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -143,3 +154,41 @@ function AgentNodeComponent({ data }: NodeProps<AgentNodeType>) {
   );
 }
 export const AgentNode = memo(AgentNodeComponent);
+
+// ─── Pipeline ────────────────────────────────────────────────────────────────
+export interface PipelineNodeData extends Record<string, unknown> {
+  id: string;
+  name: string;
+  category: string;
+  slug: string;
+  wsId: string;
+}
+export type PipelineNodeType = Node<PipelineNodeData, 'pipeline'>;
+
+const PIPELINE_CATEGORY_COLOR: Record<string, string> = {
+  planning: 'bg-purple-50 border-purple-200',
+  writing: 'bg-blue-50 border-blue-200',
+  marketing: 'bg-pink-50 border-pink-200',
+  audit: 'bg-red-50 border-red-200',
+  devops: 'bg-slate-50 border-slate-200',
+  finance: 'bg-green-50 border-green-200',
+  general: 'bg-amber-50 border-amber-200',
+};
+const DEFAULT_PIPELINE_COLOR = 'bg-amber-50 border-amber-200';
+
+function PipelineNodeComponent({ data }: NodeProps<PipelineNodeType>) {
+  const colorClass = PIPELINE_CATEGORY_COLOR[data.category] ?? DEFAULT_PIPELINE_COLOR;
+  return (
+    <div className={cn('min-w-[140px] rounded-xl border px-3 py-2.5 shadow-md', colorClass)}>
+      <Handle type="target" position={Position.Top} className="!h-2 !w-2 !border-2 !border-gray-300 !bg-white" />
+      <div className="flex items-center gap-2">
+        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-amber-100">
+          <GitBranch className="h-3.5 w-3.5 text-amber-600" />
+        </div>
+        <p className="truncate text-xs font-semibold text-gray-900">{data.name}</p>
+      </div>
+      <div className="mt-1 text-[10px] text-gray-500 truncate">{data.category}</div>
+    </div>
+  );
+}
+export const PipelineNode = memo(PipelineNodeComponent);

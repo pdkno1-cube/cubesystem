@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/server';
 import { DashboardClient } from './dashboard-client';
-import type { DashboardData, PipelineExecution, AuditLog } from './types';
+import type { DashboardData, PipelineExecution, AuditLog, CanvasPipeline } from './types';
 
 interface AgentBasic {
   id: string;
@@ -61,6 +61,12 @@ interface ContentScheduleRow {
   id: string;
   status: string;
   scheduled_at: string;
+}
+
+interface WsPipelineRow {
+  workspace_id: string;
+  pipeline_id: string;
+  pipelines: { id: string; name: string; category: string; slug: string } | null;
 }
 
 function getTodayRange(): { start: string; end: string } {
@@ -131,6 +137,7 @@ export default async function DashboardPage() {
       auditLogsResult,
       mcpConnectionsResult,
       contentSchedulesResult,
+      wsPipelinesResult,
       fastapiHealthStatus,
     ] = await Promise.all([
       supabase
@@ -198,6 +205,11 @@ export default async function DashboardPage() {
         .gte('scheduled_at', weekRange.start)
         .lt('scheduled_at', weekRange.end),
 
+      supabase
+        .from('workspace_pipelines')
+        .select('workspace_id, pipeline_id, pipelines:pipeline_id(id, name, category, slug)')
+        .eq('is_active', true),
+
       checkFastapiHealth(),
     ]);
 
@@ -210,6 +222,7 @@ export default async function DashboardPage() {
     const auditLogs = (auditLogsResult.data ?? []) as AuditLog[];
     const mcpConnections = (mcpConnectionsResult.data ?? []) as McpConnectionRow[];
     const contentSchedules = (contentSchedulesResult.data ?? []) as ContentScheduleRow[];
+    const wsPipelineRows = (wsPipelinesResult.data ?? []) as unknown as WsPipelineRow[];
     const todayPipelineCount = todayPipelineCountResult.count ?? 0;
 
     // Credit balances per workspace
@@ -302,6 +315,10 @@ export default async function DashboardPage() {
             };
           })
           .filter((x): x is NonNullable<typeof x> => x !== null)),
+        assigned_pipelines: wsPipelineRows
+          .filter((r) => r.workspace_id === ws.id && r.pipelines !== null)
+          .map((r) => r.pipelines)
+          .filter((p): p is CanvasPipeline => p !== null),
       };
     });
 

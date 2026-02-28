@@ -6,6 +6,13 @@ export interface CanvasAgent {
   status: 'idle' | 'running' | 'paused' | 'error';
 }
 
+export interface CanvasPipeline {
+  id: string;
+  name: string;
+  category: string;
+  slug: string;
+}
+
 export interface WorkspaceOverview {
   id: string;
   name: string;
@@ -22,6 +29,7 @@ export interface WorkspaceOverview {
   pipeline_error: number;
   credit_balance: number;
   assigned_agents?: CanvasAgent[];
+  assigned_pipelines?: CanvasPipeline[];
 }
 
 export interface PipelineExecution {

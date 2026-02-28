@@ -3,7 +3,13 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { GodModeCanvas } from '@/app/(dashboard)/dashboard/god-mode-canvas';
-import type { WorkspaceOverview, CanvasAgent } from '@/app/(dashboard)/dashboard/types';
+import type { WorkspaceOverview, CanvasAgent, CanvasPipeline } from '@/app/(dashboard)/dashboard/types';
+
+interface WsPipelineRow {
+  workspace_id: string;
+  pipeline_id: string;
+  pipelines: { id: string; name: string; category: string; slug: string } | null;
+}
 
 // Same data fetching logic as dashboard but simplified
 export default async function GodModePage() {
@@ -13,15 +19,17 @@ export default async function GodModePage() {
   try {
     const supabase = await createClient();
 
-    const [wsResult, agentsResult, assignmentsResult] = await Promise.all([
+    const [wsResult, agentsResult, assignmentsResult, wsPipelinesResult] = await Promise.all([
       supabase.from('workspaces').select('id, name, slug, description, icon_url, is_active, created_at').eq('is_active', true).order('created_at', { ascending: false }),
       supabase.from('agents').select('id, name, category, model, is_active'),
       supabase.from('agent_assignments').select('id, agent_id, workspace_id, status, is_active').eq('is_active', true),
+      supabase.from('workspace_pipelines').select('workspace_id, pipeline_id, pipelines:pipeline_id(id, name, category, slug)').eq('is_active', true),
     ]);
 
     const wsData = wsResult.data ?? [];
     const agentsData = agentsResult.data ?? [];
     const assignmentsData = assignmentsResult.data ?? [];
+    const wsPipelineRows = (wsPipelinesResult.data ?? []) as unknown as WsPipelineRow[];
 
     const assignedAgentIds = new Set(assignmentsData.map((a) => a.agent_id));
     agentPool = agentsData.filter((a) => !assignedAgentIds.has(a.id)).length;
@@ -59,6 +67,10 @@ export default async function GodModePage() {
       pipeline_error: 0,
       credit_balance: 0,
       assigned_agents: wsAgentsMap.get(ws.id) ?? [],
+      assigned_pipelines: wsPipelineRows
+        .filter((r) => r.workspace_id === ws.id && r.pipelines !== null)
+        .map((r) => r.pipelines)
+        .filter((p): p is CanvasPipeline => p !== null),
     }));
   } catch (err) {
     Sentry.captureException(err, { tags: { context: 'god-mode.page.load' } });

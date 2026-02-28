@@ -245,6 +245,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      workspace_pipelines: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          pipeline_id: string;
+          is_active: boolean;
+          assigned_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          pipeline_id: string;
+          is_active?: boolean;
+          assigned_at?: string;
+        };
+        Update: Partial<{
+          is_active: boolean;
+          assigned_at: string;
+        }>;
+        Relationships: [
+          {
+            foreignKeyName: 'workspace_pipelines_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'workspace_pipelines_pipeline_id_fkey';
+            columns: ['pipeline_id'];
+            isOneToOne: false;
+            referencedRelation: 'pipelines';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       agent_assignments: {
         Row: {
           id: string;
