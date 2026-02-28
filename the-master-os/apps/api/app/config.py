@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     # --- LLM Providers ---
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    google_gemini_api_key: str = ""
 
     # --- Logging ---
     log_level: str = "INFO"
