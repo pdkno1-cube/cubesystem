@@ -43,4 +43,4 @@ USER appuser
 # No EXPOSE — Celery worker does not serve HTTP
 # No HEALTHCHECK — Celery worker is not an HTTP service
 
-CMD ["python", "-m", "celery", "-A", "celery_worker.celery_app", "worker", "--loglevel=info", "-Q", "default,pipelines,notifications,monitoring,maintenance", "-B", "--concurrency=2"]
+CMD ["python", "-m", "celery", "-A", "celery_worker:celery_app", "worker", "--loglevel=info", "-Q", "default,pipelines,notifications,monitoring,maintenance", "-B", "--concurrency=2"]
