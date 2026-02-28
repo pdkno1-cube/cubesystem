@@ -42,6 +42,7 @@ interface AgentState {
 
   fetchAgents: (filter?: Partial<AgentFilter>) => Promise<void>;
   createAgent: (data: CreateAgentData) => Promise<AgentWithAssignment>;
+  updatePrompt: (agentId: string, systemPrompt: string) => Promise<void>;
   assignAgent: (agentId: string, workspaceId: string, posX?: number, posY?: number) => Promise<void>;
   releaseAgent: (agentId: string, workspaceId: string) => Promise<void>;
   deleteAgent: (agentId: string) => Promise<void>;
@@ -143,6 +144,33 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     } catch (err) {
       set({ isLoading: false });
       throw err;
+    }
+  },
+
+  updatePrompt: async (agentId, systemPrompt) => {
+    const prevAgents = get().agents;
+
+    // Optimistic update
+    set((state) => ({
+      agents: state.agents.map((a) =>
+        a.id === agentId ? { ...a, system_prompt: systemPrompt } : a
+      ),
+    }));
+
+    try {
+      const result = await apiFetch(`/api/agents/${agentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ system_prompt: systemPrompt }),
+      });
+
+      if (result.error) {
+        set({ agents: prevAgents, error: result.error.message });
+        throw new Error(result.error.message);
+      }
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: 'agents.updatePrompt' } });
+      set({ agents: prevAgents, error: '프롬프트 저장에 실패했습니다.' });
+      throw error;
     }
   },
 

@@ -1,16 +1,45 @@
 # 📖 스킬 레지스트리 INDEX
 
-> 관리: TEAM_F (ALCHEMIST) | 마지막 업데이트: 2026.02.26
+> 관리: TEAM_F (ALCHEMIST) | 마지막 업데이트: 2026.02.28
 
 ---
 
 ## 등록된 스킬
 
-_현재 등록된 스킬 없음_
-
 | ID | 스킬명 | 카테고리 | 버전 | 파일 |
 |---|---|---|---|---|
-| - | - | - | - | - |
+| S-001 | SKILL-NEWSLETTER-AGENT | ai / integration | v1.0 | SKILL-NEWSLETTER-AGENT.md |
+| S-002 | SKILL-SHORTFORM-AGENT | ai / text | v1.0 | SKILL-SHORTFORM-AGENT.md |
+| S-003 | PROMPT-CATALOG (22 에이전트) | ai / automation | v1.0 | PROMPT-CATALOG-v1.md |
+
+## 에이전트 프롬프트 카탈로그
+
+> **PROMPT-CATALOG-v1.md** — The Master OS 앱 내 22개 에이전트 시스템 프롬프트 전체 정의
+
+| 카테고리 | 에이전트 | slug | 모델 |
+|---|---|---|---|
+| 토론 스웜 | OptimistAgent | optimist-agent | opus |
+| 토론 스웜 | CriticAgent | critic-agent | opus |
+| 토론 스웜 | RealistAgent | realist-agent | opus |
+| 사업계획서 | MarketAnalystAgent | market-analyst | sonnet |
+| 사업계획서 | PlanWriterAgent | plan-writer | opus |
+| 사업계획서 | FinancialModelerAgent | financial-modeler | sonnet |
+| OSMU 마케팅 | TopicAnalystAgent | topic-analyst-agent | sonnet |
+| OSMU 마케팅 | BlogWriterAgentV2 | blog-writer-v2 | sonnet |
+| OSMU 마케팅 | InstaCreatorAgent | insta-creator-agent | sonnet |
+| OSMU 마케팅 | NewsletterAgent | newsletter-writer | haiku |
+| OSMU 마케팅 | ShortFormAgent | shortform-scriptwriter | sonnet |
+| 감사/행정 | OCRScannerAgent | ocr-scanner | sonnet |
+| 감사/행정 | BidAuditorAgent | bid-auditor | opus |
+| 감사/행정 | DataValidatorAgent | data-validator | haiku |
+| 감사/행정 | DocArchiverAgent | doc-archiver | haiku |
+| DevOps | SystemMonitorAgent | system-monitor | haiku |
+| DevOps | HotfixAgent | hotfix-agent | sonnet |
+| DevOps | ProxyManagerAgent | proxy-manager | haiku |
+| 지주회사 | COOAgent | coo-agent | opus |
+| 지주회사 | CFOAgent | cfo-agent | sonnet |
+| 지주회사 | ThinkTankAgent | think-tank | opus |
+| 지주회사 | SOPCenterAgent | sop-center | sonnet |
 
 ---
 

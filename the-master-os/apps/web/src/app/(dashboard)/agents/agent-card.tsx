@@ -8,6 +8,7 @@ import {
   Trash2,
   Eye,
   Building2,
+  Braces,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,7 @@ interface AgentCardProps {
   onRelease: (agentId: string, workspaceId: string) => void;
   onDelete: (agentId: string) => void;
   onSelect: (agent: AgentWithAssignment) => void;
+  onEditPrompt: (agent: AgentWithAssignment) => void;
 }
 
 const CATEGORY_CONFIG: Record<
@@ -153,6 +155,7 @@ export function AgentCard({
   onRelease,
   onDelete,
   onSelect,
+  onEditPrompt,
 }: AgentCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -228,6 +231,17 @@ export function AgentCard({
               >
                 <Eye className="h-4 w-4" />
                 상세보기
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item
+                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 outline-none hover:bg-gray-50"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onEditPrompt(agent);
+                }}
+              >
+                <Braces className="h-4 w-4" />
+                프롬프트 편집
               </DropdownMenu.Item>
 
               {poolStatus === 'pool' ? (

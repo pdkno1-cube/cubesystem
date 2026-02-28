@@ -6,6 +6,7 @@ import { useAgentStore } from '@/stores/agent-store';
 import { AgentCard } from './agent-card';
 import { CreateAgentDialog } from './create-agent-dialog';
 import { AssignAgentDialog } from './assign-agent-dialog';
+import { PromptEditorDialog } from './prompt-editor-dialog';
 import { SwarmTemplateDialog } from '@/components/agents/SwarmTemplateDialog';
 import { AgentDetailPanel } from '@/components/agents/AgentDetailPanel';
 import { cn } from '@/lib/utils';
@@ -95,9 +96,8 @@ export function AgentPoolClient({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSwarmOpen, setIsSwarmOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<AgentWithAssignment | null>(
-    null
-  );
+  const [selectedAgent, setSelectedAgent] = useState<AgentWithAssignment | null>(null);
+  const [promptEditorAgent, setPromptEditorAgent] = useState<AgentWithAssignment | null>(null);
 
   // Initialize store with server-fetched data
   useEffect(() => {
@@ -178,6 +178,15 @@ export function AgentPoolClient({
   const handleSelectAgent = useCallback((agent: AgentWithAssignment) => {
     setSelectedAgent(agent);
   }, []);
+
+  const handleEditPrompt = useCallback((agent: AgentWithAssignment) => {
+    setPromptEditorAgent(agent);
+  }, []);
+
+  const handlePromptSaved = useCallback(() => {
+    setPromptEditorAgent(null);
+    void fetchAgents();
+  }, [fetchAgents]);
 
   const handleDetailClose = useCallback(() => {
     setSelectedAgent(null);
@@ -323,6 +332,7 @@ export function AgentPoolClient({
                 onRelease={handleRelease}
                 onDelete={handleDelete}
                 onSelect={handleSelectAgent}
+                onEditPrompt={handleEditPrompt}
               />
             ))}
           </div>
@@ -361,6 +371,14 @@ export function AgentPoolClient({
         workspaces={workspaces}
         onClose={() => setAssignTarget(null)}
         onAssigned={handleAssigned}
+      />
+
+      {/* Prompt Editor Dialog */}
+      <PromptEditorDialog
+        agent={promptEditorAgent}
+        open={promptEditorAgent !== null}
+        onClose={() => setPromptEditorAgent(null)}
+        onSaved={handlePromptSaved}
       />
     </div>
   );
