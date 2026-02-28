@@ -39,6 +39,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   email: '#ec4899',
   monitoring: '#f97316',
   storage: '#06b6d4',
+  media: '#e11d48',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -49,6 +50,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   email: '이메일',
   monitoring: '모니터링',
   storage: '스토리지',
+  media: '미디어 생성',
 };
 
 // ─── API 응답 타입 ────────────────────────────────────────────

@@ -105,6 +105,7 @@ async function fetchSupabaseMetrics(): Promise<SupabaseLiveMetrics> {
 interface ProviderCreditUsage {
   anthropicCredits: number;
   openaiCredits: number;
+  googleCredits: number;
   otherCredits: number;
   fetched: boolean;
 }
@@ -115,6 +116,7 @@ async function fetchProviderCreditUsage(
   const fallback: ProviderCreditUsage = {
     anthropicCredits: 0,
     openaiCredits: 0,
+    googleCredits: 0,
     otherCredits: 0,
     fetched: false,
   };
@@ -165,6 +167,7 @@ async function fetchProviderCreditUsage(
     // 프로바이더별 크레딧 합산
     let anthropicCredits = 0;
     let openaiCredits = 0;
+    let googleCredits = 0;
     let otherCredits = 0;
 
     for (const row of usageRows) {
@@ -176,6 +179,8 @@ async function fetchProviderCreditUsage(
         anthropicCredits += amount;
       } else if (provider === 'openai') {
         openaiCredits += amount;
+      } else if (provider === 'google') {
+        googleCredits += amount;
       } else {
         otherCredits += amount;
       }
@@ -184,6 +189,7 @@ async function fetchProviderCreditUsage(
     return {
       anthropicCredits: Math.round(anthropicCredits * 100) / 100,
       openaiCredits: Math.round(openaiCredits * 100) / 100,
+      googleCredits: Math.round(googleCredits * 100) / 100,
       otherCredits: Math.round(otherCredits * 100) / 100,
       fetched: true,
     };
@@ -644,6 +650,18 @@ export async function GET() {
   // Google Drive는 MCP connection 기반 — env var 또는 vault
   const gdriveConnStatus = envConnectionStatus('GOOGLE_SERVICE_ACCOUNT_KEY');
 
+  // Google Gemini
+  const geminiConnStatus = envConnectionStatus('GOOGLE_GEMINI_API_KEY');
+
+  // xAI (Grok)
+  const xaiConnStatus = envConnectionStatus('XAI_API_KEY');
+
+  // Redis
+  const redisConnStatus = envConnectionStatus('REDIS_URL', 'CELERY_BROKER_URL');
+
+  // PaddleOCR
+  const paddleocrConnStatus = envConnectionStatus('PADDLEOCR_URL');
+
   // ─── 메트릭 빌더 ───────────────────────────────────────────────
   function metric(
     label: string,
@@ -932,6 +950,114 @@ export async function GET() {
         },
       } satisfies ServiceData;
     })(),
+
+    // 9. Google Gemini
+    (() => {
+      const geminiSpendValue = creditUsage.fetched && creditUsage.googleCredits > 0
+        ? creditUsage.googleCredits
+        : null;
+      const geminiBudgetUsd = envNum('GEMINI_MONTHLY_BUDGET_USD', 20);
+      const metrics: UsageMetric[] = geminiSpendValue !== null
+        ? [metric('월 예산 사용', geminiSpendValue, geminiBudgetUsd, 'USD', 'live')]
+        : [];
+      return {
+        id: 'gemini',
+        name: 'Google Gemini',
+        description: 'Gemini 2.5 Flash/Pro — 멀티모달 AI 에이전트 추론',
+        category: 'ai' as const,
+        currentPlan: geminiConnStatus === 'connected' ? 'Pay-as-you-go' : '미연결',
+        monthlyCostUsd: geminiSpendValue ?? 0,
+        isVariableCost: true,
+        costLabel: geminiSpendValue !== null ? `$${geminiSpendValue.toFixed(2)} 이번 달` : (geminiConnStatus === 'connected' ? '$0.00' : '미설정'),
+        status: metrics.length > 0 ? worstStatus(metrics) : (geminiConnStatus === 'connected' ? 'stable' : 'stable'),
+        connectionStatus: geminiConnStatus,
+        metrics,
+        logoEmoji: '💎',
+        upgrade: {
+          nextPlan: 'Tier 2',
+          nextPlanCostUsd: 0,
+          keyBenefit: 'Rate limit 상향, Gemini 2.5 Pro 우선 접근',
+          consoleUrl: 'https://aistudio.google.com/apikey',
+          triggerCondition: '월 $50 초과 또는 Rate Limit 에러 빈발 시',
+        },
+      } satisfies ServiceData;
+    })(),
+
+    // 10. xAI (Grok) — 이미지/영상 생성
+    (() => {
+      const xaiSpend = envNumOrNull('XAI_MONTHLY_SPEND_USD');
+      const xaiBudgetUsd = envNum('XAI_MONTHLY_BUDGET_USD', 50);
+      const metrics: UsageMetric[] = xaiSpend.value !== null
+        ? [metric('월 예산 사용', xaiSpend.value, xaiBudgetUsd, 'USD', xaiSpend.source)]
+        : [];
+      return {
+        id: 'xai',
+        name: 'xAI (Grok Aurora)',
+        description: '마케팅 이미지/영상 AI 생성 — Grok Imagine API',
+        category: 'media' as const,
+        currentPlan: xaiConnStatus === 'connected' ? 'Pay-as-you-go' : '미연결',
+        monthlyCostUsd: xaiSpend.value ?? 0,
+        isVariableCost: true,
+        costLabel: xaiSpend.value !== null ? `$${xaiSpend.value.toFixed(2)} 이번 달` : (xaiConnStatus === 'connected' ? '$0.00' : '미설정'),
+        status: metrics.length > 0 ? worstStatus(metrics) : (xaiConnStatus === 'connected' ? 'stable' : 'stable'),
+        connectionStatus: xaiConnStatus,
+        metrics,
+        logoEmoji: '🎨',
+        upgrade: {
+          nextPlan: 'Enterprise',
+          nextPlanCostUsd: 0,
+          keyBenefit: '고해상도 2K 이미지, 15초 720p 영상, 우선 큐',
+          consoleUrl: 'https://console.x.ai',
+          triggerCondition: '월 $100 초과 시',
+        },
+      } satisfies ServiceData;
+    })(),
+
+    // 11. Redis (Railway)
+    {
+      id: 'redis',
+      name: 'Redis',
+      description: 'Celery 브로커 + 캐시 스토어 (Railway 호스팅)',
+      category: 'backend' as const,
+      currentPlan: 'Railway Hobby',
+      monthlyCostUsd: 0,
+      isVariableCost: false,
+      costLabel: 'Railway 크레딧 포함',
+      status: redisConnStatus === 'connected' ? 'stable' : 'stable',
+      connectionStatus: redisConnStatus,
+      metrics: [],
+      logoEmoji: '🔴',
+      upgrade: {
+        nextPlan: 'Railway Pro + Redis Cloud',
+        nextPlanCostUsd: 5,
+        keyBenefit: '영구 저장, 클러스터 모드, 자동 백업',
+        consoleUrl: 'https://railway.com/dashboard',
+        triggerCondition: '메모리 256MB 초과 또는 고가용성 필요 시',
+      },
+    },
+
+    // 12. PaddleOCR (Railway)
+    {
+      id: 'paddleocr',
+      name: 'PaddleOCR',
+      description: '문서 OCR 마이크로서비스 (Railway 호스팅)',
+      category: 'ai' as const,
+      currentPlan: 'Railway Hobby',
+      monthlyCostUsd: 0,
+      isVariableCost: false,
+      costLabel: 'Railway 크레딧 포함',
+      status: paddleocrConnStatus === 'connected' ? 'stable' : 'stable',
+      connectionStatus: paddleocrConnStatus,
+      metrics: [],
+      logoEmoji: '📄',
+      upgrade: {
+        nextPlan: 'GPU 인스턴스',
+        nextPlanCostUsd: 30,
+        keyBenefit: 'GPU 가속 OCR, 배치 처리, 고속 추론',
+        consoleUrl: 'https://railway.com/dashboard',
+        triggerCondition: 'OCR 요청 분당 10건 초과 시',
+      },
+    },
   ];
 
   // 상태가 심각한 순 → 비용 순으로 정렬

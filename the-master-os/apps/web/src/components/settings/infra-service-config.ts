@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────
 
 export type ServiceStatus = 'stable' | 'good' | 'caution' | 'warning' | 'critical';
-export type ServiceCategory = 'hosting' | 'database' | 'ai' | 'email' | 'monitoring' | 'storage' | 'backend';
+export type ServiceCategory = 'hosting' | 'database' | 'ai' | 'email' | 'monitoring' | 'storage' | 'backend' | 'media';
 
 export interface UsageMetric {
   label: string;
