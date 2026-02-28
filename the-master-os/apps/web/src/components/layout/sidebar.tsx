@@ -105,8 +105,50 @@ export function Sidebar() {
         )}
       >
         {/* Logo */}
-        <div className="flex h-16 items-center px-6">
-          <span className="text-xl font-bold text-white">The Master OS</span>
+        <div className="flex h-16 items-center px-5">
+          <Link
+            href="/dashboard"
+            className="group flex items-center gap-3 rounded-xl p-1.5 transition-colors hover:bg-white/10"
+          >
+            {/* Cube icon */}
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand-600 shadow-md shadow-brand-900/30">
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+              >
+                {/* Top face */}
+                <path
+                  d="M10 2L18 6.5V7.5L10 12L2 7.5V6.5L10 2Z"
+                  fill="white"
+                  fillOpacity="0.95"
+                />
+                {/* Left face */}
+                <path
+                  d="M2 7.5L10 12V18L2 13.5V7.5Z"
+                  fill="white"
+                  fillOpacity="0.5"
+                />
+                {/* Right face */}
+                <path
+                  d="M18 7.5V13.5L10 18V12L18 7.5Z"
+                  fill="white"
+                  fillOpacity="0.7"
+                />
+              </svg>
+            </div>
+
+            {/* Text */}
+            <div className="flex flex-col leading-none">
+              <span className="text-[10px] font-medium uppercase tracking-[0.15em] text-white/50">
+                The
+              </span>
+              <span className="text-sm font-bold tracking-tight text-white">
+                Master OS
+              </span>
+            </div>
+          </Link>
         </div>
 
         {/* Navigation */}
