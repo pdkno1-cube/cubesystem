@@ -11,6 +11,7 @@ import {
   Server,
   ArrowRight,
   Loader2,
+  Mail,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -50,7 +51,94 @@ const CATEGORY_LABELS: Record<string, string> = {
   storage: '스토리지',
 };
 
-// ─── 예상 비용 추이 (정적 시뮬레이션 — 향후 DB 저장) ──────
+// ─── API 응답 타입 ────────────────────────────────────────────
+interface HistoryServiceEntry {
+  service_id: string;
+  cost: number;
+}
+
+interface MonthlyHistoryEntry {
+  month: string;
+  year: number;
+  totalCostUsd: number;
+  services: HistoryServiceEntry[];
+}
+
+interface InfraHistoryResponse {
+  history: MonthlyHistoryEntry[];
+}
+
+interface InfraAlertInfo {
+  serviceId: string;
+  serviceName: string;
+  status: string;
+  monthlyCostUsd: number;
+  topMetricLabel: string;
+  topMetricUsagePercent: number;
+}
+
+interface InfraAlertsApiResponse {
+  alerts: InfraAlertInfo[];
+  emailSent: boolean;
+  reason?: string;
+}
+
+// ─── 실 데이터 → 차트 변환 ─────────────────────────────────────
+const MONTH_LABELS: Record<string, string> = {
+  '01': '1월', '02': '2월', '03': '3월', '04': '4월',
+  '05': '5월', '06': '6월', '07': '7월', '08': '8월',
+  '09': '9월', '10': '10월', '11': '11월', '12': '12월',
+};
+const DEFAULT_MONTH_LABEL = '';
+
+function convertHistoryToChart(
+  history: MonthlyHistoryEntry[],
+  currentTotal: number,
+): Array<{ month: string; cost: number; projected: number }> {
+  const now = new Date();
+  const currentMonthKey = `${String(now.getFullYear())}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const result: Array<{ month: string; cost: number; projected: number }> = [];
+
+  for (const entry of history) {
+    const entryKey = `${String(entry.year)}-${entry.month}`;
+    const label = MONTH_LABELS[entry.month] ?? DEFAULT_MONTH_LABEL;
+    const isFuture = entryKey > currentMonthKey;
+
+    result.push({
+      month: isFuture ? `${label}(예측)` : label,
+      cost: isFuture ? 0 : entry.totalCostUsd,
+      projected: entry.totalCostUsd,
+    });
+  }
+
+  // Add projections for 3 months after the last entry
+  const lastEntry = history[history.length - 1];
+  if (lastEntry) {
+    const lastDate = new Date(lastEntry.year, parseInt(lastEntry.month, 10) - 1, 1);
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(lastDate.getFullYear(), lastDate.getMonth() + i, 1);
+      const mKey = `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+      // Skip if this month is already in the history
+      const alreadyExists = history.some(
+        (h) => `${String(h.year)}-${h.month}` === mKey,
+      );
+      if (alreadyExists) {
+        continue;
+      }
+
+      const label = MONTH_LABELS[String(d.getMonth() + 1).padStart(2, '0')] ?? DEFAULT_MONTH_LABEL;
+      const factor = 1 + i * 0.05;
+      const projected = Math.round(currentTotal * factor * 100) / 100;
+      result.push({ month: `${label}(예측)`, cost: 0, projected });
+    }
+  }
+
+  return result;
+}
+
+// ─── 예상 비용 추이 (정적 시뮬레이션 — DB 데이터 없을 때 폴백) ──────
 function generateCostHistory(currentTotal: number): Array<{ month: string; cost: number; projected: number }> {
   const now = new Date();
   const months: Array<{ month: string; cost: number; projected: number }> = [];
@@ -123,17 +211,41 @@ export function InfraCostClient() {
   const [data, setData] = useState<InfraStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [realHistory, setRealHistory] = useState<MonthlyHistoryEntry[] | null>(null);
+  const [isSendingAlert, setIsSendingAlert] = useState(false);
+  const [alertBanner, setAlertBanner] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/settings/infra-status', { cache: 'no-store' });
-      if (!res.ok) {
-        throw new Error(`HTTP ${String(res.status)}`);
+      // Fetch infra status and history in parallel
+      const [statusRes, historyRes] = await Promise.all([
+        fetch('/api/settings/infra-status', { cache: 'no-store' }),
+        fetch('/api/settings/infra-history?months=9', { cache: 'no-store' }).catch(() => null),
+      ]);
+
+      if (!statusRes.ok) {
+        throw new Error(`HTTP ${String(statusRes.status)}`);
       }
-      const json: InfraStatusResponse = await res.json();
+      const json: InfraStatusResponse = await statusRes.json();
       setData(json);
+
+      // Process history data (non-blocking)
+      if (historyRes && historyRes.ok) {
+        try {
+          const historyJson = (await historyRes.json()) as InfraHistoryResponse;
+          if (historyJson.history && historyJson.history.length > 0) {
+            setRealHistory(historyJson.history);
+          }
+        } catch (histErr) {
+          Sentry.captureException(histErr, { tags: { context: 'infra-cost.fetch-history' } });
+          // History fetch failure is non-critical; fall back to simulation
+        }
+      }
     } catch (err) {
       Sentry.captureException(err, { tags: { context: 'infra-cost.fetch' } });
       setError('인프라 데이터를 불러오는 데 실패했습니다.');
@@ -145,6 +257,50 @@ export function InfraCostClient() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleSendAlertEmail = useCallback(async () => {
+    setIsSendingAlert(true);
+    setAlertBanner(null);
+    try {
+      const res = await fetch('/api/settings/infra-alerts', {
+        method: 'POST',
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${String(res.status)}`);
+      }
+      const json = (await res.json()) as InfraAlertsApiResponse;
+
+      if (json.emailSent) {
+        setAlertBanner({
+          type: 'success',
+          message: `알림 이메일이 발송되었습니다. (${String(json.alerts.length)}개 서비스)`,
+        });
+      } else if (json.alerts.length === 0) {
+        setAlertBanner({
+          type: 'info',
+          message: '주의 이상 상태의 서비스가 없어 알림을 발송하지 않았습니다.',
+        });
+      } else {
+        setAlertBanner({
+          type: 'info',
+          message: json.reason ?? '알림 이메일 발송을 건너뛰었습니다.',
+        });
+      }
+    } catch (err) {
+      Sentry.captureException(err, { tags: { context: 'infra-cost.send-alert' } });
+      setAlertBanner({
+        type: 'error',
+        message: '알림 발송 중 오류가 발생했습니다.',
+      });
+    } finally {
+      setIsSendingAlert(false);
+      // Auto-dismiss banner after 6 seconds
+      setTimeout(() => {
+        setAlertBanner(null);
+      }, 6000);
+    }
+  }, []);
 
   if (isLoading && !data) {
     return (
@@ -177,7 +333,9 @@ export function InfraCostClient() {
   const status = overallStatus(data);
   const statusCfg = STATUS_CONFIG[status];
   const alerts = extractAlerts(data);
-  const costHistory = generateCostHistory(data.totalMonthlyCostUsd);
+  const costHistory = realHistory
+    ? convertHistoryToChart(realHistory, data.totalMonthlyCostUsd)
+    : generateCostHistory(data.totalMonthlyCostUsd);
   const freeCount = data.services.filter((s) => s.monthlyCostUsd === 0).length;
   const paidCount = data.services.length - freeCount;
 
@@ -303,13 +461,55 @@ export function InfraCostClient() {
         </div>
       </div>
 
+      {/* ─── 알림 이메일 결과 배너 ────────────────────────────── */}
+      {alertBanner && (
+        <div
+          className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${
+            alertBanner.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-700'
+              : alertBanner.type === 'error'
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-blue-200 bg-blue-50 text-blue-700'
+          }`}
+        >
+          {alertBanner.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          ) : alertBanner.type === 'error' ? (
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+          ) : (
+            <Mail className="h-4 w-4 shrink-0" />
+          )}
+          <p className="text-sm">{alertBanner.message}</p>
+          <button
+            onClick={() => { setAlertBanner(null); }}
+            className="ml-auto shrink-0 text-xs opacity-60 hover:opacity-100"
+          >
+            닫기
+          </button>
+        </div>
+      )}
+
       {/* ─── 예산 알림 배너 ────────────────────────────────── */}
       {alerts.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-orange-500" />
-            예산 알림
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              예산 알림
+            </h3>
+            <button
+              onClick={handleSendAlertEmail}
+              disabled={isSendingAlert}
+              className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-50"
+            >
+              {isSendingAlert ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Mail className="h-3.5 w-3.5" />
+              )}
+              예산 알림 발송
+            </button>
+          </div>
           {alerts.map((alert) => {
             const cfg = STATUS_CONFIG[alert.status];
             return (
@@ -341,7 +541,10 @@ export function InfraCostClient() {
                 <TrendingUp className="h-4 w-4 text-indigo-500" />
                 비용 추이 & 예측
               </h3>
-              <p className="text-xs text-gray-400 mt-0.5">최근 6개월 + 3개월 예측</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {realHistory ? '실 데이터 기반' : '시뮬레이션 (DB 연동 시 실데이터 표시)'}
+                {' '}· 최근 6개월 + 3개월 예측
+              </p>
             </div>
           </div>
           <div className="h-64">
