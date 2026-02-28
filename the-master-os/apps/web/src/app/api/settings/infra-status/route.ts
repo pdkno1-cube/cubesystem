@@ -193,6 +193,273 @@ async function fetchProviderCreditUsage(
   }
 }
 
+// ─── Vercel API 실데이터 조회 ────────────────────────────────
+interface VercelLiveMetrics {
+  bandwidthGB: number | null;
+  functionInvocations: number | null;
+  latestDeploymentStatus: string | null;
+  latestDeploymentUrl: string | null;
+  fetched: boolean;
+}
+
+async function fetchVercelUsage(): Promise<VercelLiveMetrics> {
+  const token = process.env.VERCEL_TOKEN;
+  const teamId = process.env.VERCEL_TEAM_ID ?? 'team_H1P2cEHzoAsU1Gv16u4YY8O3';
+  const projectId = process.env.VERCEL_PROJECT_ID ?? 'prj_asgVkwOc9PqPMaXAU7QV6rdxTxfZ';
+  const fallback: VercelLiveMetrics = {
+    bandwidthGB: null,
+    functionInvocations: null,
+    latestDeploymentStatus: null,
+    latestDeploymentUrl: null,
+    fetched: false,
+  };
+
+  if (!token) {
+    return fallback;
+  }
+
+  const headers = { Authorization: `Bearer ${token}` };
+
+  try {
+    // Fetch usage + latest deployment in parallel
+    const [usageResp, deployResp] = await Promise.all([
+      fetch(
+        `https://api.vercel.com/v1/usage?teamId=${teamId}`,
+        { headers, next: { revalidate: 300 } },
+      ).catch(() => null),
+      fetch(
+        `https://api.vercel.com/v6/deployments?projectId=${projectId}&teamId=${teamId}&limit=1&state=READY`,
+        { headers, next: { revalidate: 300 } },
+      ).catch(() => null),
+    ]);
+
+    let bandwidthGB: number | null = null;
+    let functionInvocations: number | null = null;
+    let latestDeploymentStatus: string | null = null;
+    let latestDeploymentUrl: string | null = null;
+
+    // Parse usage response
+    if (usageResp && usageResp.ok) {
+      const usageData = (await usageResp.json()) as {
+        bandwidth?: { usage?: number };
+        serverlessFunctionExecution?: { usage?: number };
+        usage?: {
+          bandwidth?: number;
+          serverlessFunctionInvocations?: number;
+        };
+        metrics?: Array<{
+          name?: string;
+          usage?: number;
+        }>;
+      };
+
+      // Vercel API can return bandwidth in different structures
+      const bwBytes = usageData.bandwidth?.usage
+        ?? usageData.usage?.bandwidth
+        ?? null;
+      if (bwBytes !== null) {
+        bandwidthGB = Math.round((bwBytes / (1024 * 1024 * 1024)) * 100) / 100;
+      }
+
+      const fnCalls = usageData.serverlessFunctionExecution?.usage
+        ?? usageData.usage?.serverlessFunctionInvocations
+        ?? null;
+      if (fnCalls !== null) {
+        functionInvocations = fnCalls;
+      }
+
+      // If metrics array present, try to extract from there
+      if (usageData.metrics && Array.isArray(usageData.metrics)) {
+        for (const m of usageData.metrics) {
+          if (m.name === 'bandwidth' && m.usage !== undefined && bandwidthGB === null) {
+            bandwidthGB = Math.round((m.usage / (1024 * 1024 * 1024)) * 100) / 100;
+          }
+          if (m.name === 'serverlessFunctionExecution' && m.usage !== undefined && functionInvocations === null) {
+            functionInvocations = m.usage;
+          }
+        }
+      }
+    } else if (usageResp && !usageResp.ok) {
+      Sentry.captureException(
+        new Error(`Vercel Usage API ${String(usageResp.status)}: ${usageResp.statusText}`),
+        { tags: { context: 'infra-status.vercel-usage' } },
+      );
+    }
+
+    // Parse deployment response
+    if (deployResp && deployResp.ok) {
+      const deployData = (await deployResp.json()) as {
+        deployments?: Array<{
+          state?: string;
+          url?: string;
+          readyState?: string;
+        }>;
+      };
+
+      const latest = deployData.deployments?.[0];
+      if (latest) {
+        latestDeploymentStatus = latest.readyState ?? latest.state ?? null;
+        latestDeploymentUrl = latest.url ?? null;
+      }
+    } else if (deployResp && !deployResp.ok) {
+      Sentry.captureException(
+        new Error(`Vercel Deployments API ${String(deployResp.status)}: ${deployResp.statusText}`),
+        { tags: { context: 'infra-status.vercel-deployments' } },
+      );
+    }
+
+    return {
+      bandwidthGB,
+      functionInvocations,
+      latestDeploymentStatus,
+      latestDeploymentUrl,
+      fetched: true,
+    };
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'infra-status.vercel-api' } });
+    return fallback;
+  }
+}
+
+// ─── Railway GraphQL API 실데이터 조회 ──────────────────────
+interface RailwayLiveMetrics {
+  currentUsageUsd: number | null;
+  estimatedUsageUsd: number | null;
+  projectName: string | null;
+  fetched: boolean;
+}
+
+async function fetchRailwayUsage(): Promise<RailwayLiveMetrics> {
+  const token = process.env.RAILWAY_API_TOKEN;
+  const fallback: RailwayLiveMetrics = {
+    currentUsageUsd: null,
+    estimatedUsageUsd: null,
+    projectName: null,
+    fetched: false,
+  };
+
+  if (!token) {
+    return fallback;
+  }
+
+  try {
+    // Try the full usage query first
+    const usageQuery = `query {
+      me {
+        projects {
+          edges {
+            node {
+              id
+              name
+              usage {
+                currentUsage
+                estimatedUsage
+              }
+            }
+          }
+        }
+      }
+    }`;
+
+    const resp = await fetch('https://backboard.railway.app/graphql/v2', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: usageQuery }),
+      next: { revalidate: 300 }, // 5-minute cache
+    });
+
+    if (!resp.ok) {
+      Sentry.captureException(
+        new Error(`Railway GraphQL API ${String(resp.status)}: ${resp.statusText}`),
+        { tags: { context: 'infra-status.railway-api' } },
+      );
+      return fallback;
+    }
+
+    const body = (await resp.json()) as {
+      data?: {
+        me?: {
+          projects?: {
+            edges?: Array<{
+              node?: {
+                id?: string;
+                name?: string;
+                usage?: {
+                  currentUsage?: number;
+                  estimatedUsage?: number;
+                };
+              };
+            }>;
+          };
+        };
+      };
+      errors?: Array<{ message: string }>;
+    };
+
+    // If the usage query has errors, try a simpler query to at least verify connectivity
+    if (body.errors && body.errors.length > 0) {
+      Sentry.addBreadcrumb({
+        message: `Railway usage query errors: ${body.errors.map(e => e.message).join(', ')}`,
+        level: 'warning',
+      });
+
+      // Fallback: simpler query for connectivity check
+      const simpleResp = await fetch('https://backboard.railway.app/graphql/v2', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: '{ me { email name } }' }),
+        next: { revalidate: 300 },
+      });
+
+      if (simpleResp.ok) {
+        // At least we know the token works; return fetched=true with null metrics
+        return { ...fallback, fetched: true };
+      }
+
+      return fallback;
+    }
+
+    const edges = body.data?.me?.projects?.edges ?? [];
+
+    // Sum usage across all projects
+    let totalCurrentUsage = 0;
+    let totalEstimatedUsage = 0;
+    let primaryProjectName: string | null = null;
+    let hasUsageData = false;
+
+    for (const edge of edges) {
+      const node = edge.node;
+      if (!node) {
+        continue;
+      }
+      if (!primaryProjectName && node.name) {
+        primaryProjectName = node.name;
+      }
+      if (node.usage) {
+        hasUsageData = true;
+        totalCurrentUsage += node.usage.currentUsage ?? 0;
+        totalEstimatedUsage += node.usage.estimatedUsage ?? 0;
+      }
+    }
+
+    return {
+      currentUsageUsd: hasUsageData ? Math.round(totalCurrentUsage * 100) / 100 : null,
+      estimatedUsageUsd: hasUsageData ? Math.round(totalEstimatedUsage * 100) / 100 : null,
+      projectName: primaryProjectName,
+      fetched: true,
+    };
+  } catch (error) {
+    Sentry.captureException(error, { tags: { context: 'infra-status.railway-api' } });
+    return fallback;
+  }
+}
+
 // ─── Vault 시크릿 존재 여부 확인 ──────────────────────────────
 interface VaultSecretStatus {
   resendConfigured: boolean;
@@ -274,18 +541,41 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 비동기 데이터 4종 병렬 조회
-  const [supabaseLive, creditUsage, vaultStatus, resendEmails] = await Promise.all([
+  // 비동기 데이터 6종 병렬 조회
+  const [supabaseLive, creditUsage, vaultStatus, resendEmails, vercelLive, railwayLive] = await Promise.all([
     fetchSupabaseMetrics(),
     fetchProviderCreditUsage(supabase),
     fetchVaultSecretStatus(supabase),
     fetchResendEmailCount(supabase),
+    fetchVercelUsage(),
+    fetchRailwayUsage(),
   ]);
 
-  // ─── 사용량 값 (live query > env var > null) ─────────────────────
-  const vercelBandwidth    = envNumOrNull('VERCEL_BANDWIDTH_GB');
-  const vercelFnInvoc      = envNumOrNull('VERCEL_FN_INVOCATIONS');
-  const railwayUsage       = envNumOrNull('RAILWAY_CURRENT_USAGE_USD');
+  // ─── 사용량 값 (live API > env var > null) ─────────────────────
+  // Vercel: live API > env var > null
+  const vercelBandwidth: { value: number | null; source: 'live' | 'env' | 'not_configured' } =
+    vercelLive.fetched && vercelLive.bandwidthGB !== null
+      ? { value: vercelLive.bandwidthGB, source: 'live' }
+      : (() => {
+          const env = envNumOrNull('VERCEL_BANDWIDTH_GB');
+          return { value: env.value, source: env.source };
+        })();
+  const vercelFnInvoc: { value: number | null; source: 'live' | 'env' | 'not_configured' } =
+    vercelLive.fetched && vercelLive.functionInvocations !== null
+      ? { value: vercelLive.functionInvocations, source: 'live' }
+      : (() => {
+          const env = envNumOrNull('VERCEL_FN_INVOCATIONS');
+          return { value: env.value, source: env.source };
+        })();
+
+  // Railway: live API > env var > null
+  const railwayUsage: { value: number | null; source: 'live' | 'env' | 'not_configured' } =
+    railwayLive.fetched && railwayLive.currentUsageUsd !== null
+      ? { value: railwayLive.currentUsageUsd, source: 'live' }
+      : (() => {
+          const env = envNumOrNull('RAILWAY_CURRENT_USAGE_USD');
+          return { value: env.value, source: env.source };
+        })();
   const railwayMemory      = envNumOrNull('RAILWAY_MEMORY_MB');
 
   // Supabase: 실데이터 > env var > null
@@ -341,13 +631,15 @@ export async function GET() {
     process.env.NEXT_PUBLIC_SUPABASE_URL ? 'connected' : 'not_configured'
   );
 
-  // Railway는 FASTAPI_URL 존재 여부로 판정
-  const railwayConnStatus = envConnectionStatus('FASTAPI_URL', 'NEXT_PUBLIC_FASTAPI_URL');
+  // Railway: live API 성공 > env var > not_configured
+  const railwayConnStatus: ConnectionStatus = railwayLive.fetched
+    ? 'connected'
+    : envConnectionStatus('FASTAPI_URL', 'NEXT_PUBLIC_FASTAPI_URL');
 
-  // Vercel은 배포 환경이면 항상 connected
-  const vercelConnStatus: ConnectionStatus = process.env.VERCEL ? 'connected' : (
-    envConnectionStatus('VERCEL_URL', 'NEXT_PUBLIC_VERCEL_URL')
-  );
+  // Vercel: live API 성공 > 배포 환경 > env var
+  const vercelConnStatus: ConnectionStatus = vercelLive.fetched
+    ? 'connected'
+    : (process.env.VERCEL ? 'connected' : envConnectionStatus('VERCEL_URL', 'NEXT_PUBLIC_VERCEL_URL'));
 
   // Google Drive는 MCP connection 기반 — env var 또는 vault
   const gdriveConnStatus = envConnectionStatus('GOOGLE_SERVICE_ACCOUNT_KEY');
@@ -372,10 +664,17 @@ export async function GET() {
         metric('대역폭', vercelBandwidth.value, 100, 'GB', vercelBandwidth.source),
         metric('함수 호출', vercelFnInvoc.value, 100_000, '회', vercelFnInvoc.source),
       ];
+      const descParts = ['프론트엔드 호스팅 & Edge 배포 플랫폼'];
+      if (vercelLive.fetched) {
+        descParts.push('실시간 조회');
+      }
+      if (vercelLive.latestDeploymentStatus) {
+        descParts.push(`최신 배포: ${vercelLive.latestDeploymentStatus}`);
+      }
       return {
         id: 'vercel',
         name: 'Vercel',
-        description: '프론트엔드 호스팅 & Edge 배포 플랫폼',
+        description: descParts.join(' — '),
         category: 'hosting' as const,
         currentPlan: 'Hobby (무료)',
         monthlyCostUsd: 0,
@@ -402,10 +701,21 @@ export async function GET() {
         metric('크레딧 사용', railwayUsage.value, 5, 'USD', railwayUsage.source),
         metric('메모리', railwayMemory.value, 512, 'MB', railwayMemory.source),
       ];
+      // Add estimated usage metric if available from live API
+      if (railwayLive.fetched && railwayLive.estimatedUsageUsd !== null) {
+        metrics.push(metric('예상 월 사용량', railwayLive.estimatedUsageUsd, 5, 'USD', 'live'));
+      }
+      const descParts = ['FastAPI 백엔드 서버 (파이프라인 오케스트레이션)'];
+      if (railwayLive.fetched) {
+        descParts.push('실시간 조회');
+      }
+      if (railwayLive.projectName) {
+        descParts.push(railwayLive.projectName);
+      }
       return {
         id: 'railway',
         name: 'Railway',
-        description: 'FastAPI 백엔드 서버 (파이프라인 오케스트레이션)',
+        description: descParts.join(' — '),
         category: 'backend' as const,
         currentPlan: 'Hobby ($5 크레딧/월)',
         monthlyCostUsd: railwayCostValue,

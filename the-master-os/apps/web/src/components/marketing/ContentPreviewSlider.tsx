@@ -221,7 +221,7 @@ export function ContentPreviewSlider({
         {/* Footer actions */}
         {schedule && schedule.status === 'pending' && (
           <div className="border-t border-gray-200 px-5 py-4 flex gap-3">
-            {schedule.channel === 'newsletter' && onSendNow && (
+            {onSendNow && (
               <button
                 onClick={() => void onSendNow(schedule.id)}
                 className={clsx(
@@ -231,7 +231,7 @@ export function ContentPreviewSlider({
                 )}
               >
                 <Send className="h-4 w-4" />
-                지금 발송
+                {schedule.channel === 'newsletter' ? '지금 발송' : '지금 발행'}
               </button>
             )}
             <button

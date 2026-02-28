@@ -260,7 +260,7 @@ export function MarketingClient({
     [updateScheduleStatus, closeSlider, fetchSchedules, viewYear, viewMonth],
   );
 
-  // Send newsletter now
+  // Publish content now (all channels via unified /api/marketing/publish)
   const handleSendNow = useCallback(
     async (id: string) => {
       const item = schedules.find((s) => s.id === id);
@@ -270,31 +270,46 @@ export function MarketingClient({
 
       updateScheduleStatus(id, 'running');
       try {
-        const content = item.content as Record<string, unknown>;
-        await fetch('/api/marketing/newsletter', {
+        const resp = await fetch('/api/marketing/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            workspace_id: workspaceId,
-            subject: String(content.subject ?? item.title),
-            html: String(content.html ?? ''),
-            text: String(content.text ?? ''),
+            scheduleId: id,
+            channel: item.channel,
           }),
         });
-        updateScheduleStatus(id, 'completed');
-        // Update schedule status in DB
-        await fetch(`/api/marketing/schedules/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'completed' }),
-        });
-        closeSlider();
+
+        const result = await resp.json() as {
+          data: {
+            success: boolean;
+            status: 'published' | 'not_configured' | 'error' | 'manual';
+            message: string;
+          };
+        };
+
+        if (result.data.success) {
+          updateScheduleStatus(id, 'completed');
+          closeSlider();
+        } else if (result.data.status === 'not_configured') {
+          updateScheduleStatus(id, 'pending');
+          Sentry.addBreadcrumb({
+            category: 'marketing.publish',
+            message: result.data.message,
+            level: 'info',
+          });
+        } else {
+          updateScheduleStatus(id, 'failed');
+          Sentry.captureMessage(`Publish failed: ${result.data.message}`, {
+            level: 'error',
+            tags: { context: 'marketing.publish', channel: item.channel },
+          });
+        }
       } catch (error) {
-        Sentry.captureException(error, { tags: { context: 'marketing.newsletter.sendNow' } });
+        Sentry.captureException(error, { tags: { context: 'marketing.publish' } });
         updateScheduleStatus(id, 'failed');
       }
     },
-    [schedules, workspaceId, updateScheduleStatus, closeSlider],
+    [schedules, updateScheduleStatus, closeSlider],
   );
 
   // Month navigation label
