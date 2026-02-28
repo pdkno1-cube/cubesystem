@@ -33,7 +33,7 @@ dependencies = [
     "slowapi>=0.1.9",
 
     # Monitoring
-    "sentry-sdk[fastapi]>=2.19",
+    "sentry-sdk[fastapi,celery]>=2.19",
 
     # LLM Providers
     "anthropic>=0.40.0",

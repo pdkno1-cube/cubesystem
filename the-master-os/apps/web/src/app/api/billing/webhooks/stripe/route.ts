@@ -164,6 +164,52 @@ async function handleSubscriptionUpdated(
 }
 
 /**
+ * customer.subscription.deleted — 구독 영구 삭제 시 Free 플랜으로 다운그레이드
+ *
+ * Stripe webhook payload:
+ *   data.object.id (subscription id)
+ *   data.object.customer (string)
+ */
+async function handleSubscriptionDeleted(
+  data: Record<string, unknown>,
+): Promise<void> {
+  const supabase = createServiceClient();
+
+  const subscriptionId = data["id"] as string | undefined;
+
+  if (!subscriptionId) {
+    Sentry.captureMessage("Stripe subscription.deleted: missing subscription id", {
+      level: "warning",
+    });
+    return;
+  }
+
+  // Free 플랜 조회
+  const { data: freePlan } = await supabase
+    .from("subscription_plans")
+    .select("id")
+    .eq("slug", "free")
+    .eq("is_active", true)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("workspace_subscriptions")
+    .update({
+      status: "cancelled" as const,
+      plan_id: (freePlan?.id as string | undefined) ?? undefined,
+      stripe_subscription_id: null,
+    })
+    .eq("stripe_subscription_id", subscriptionId);
+
+  if (error) {
+    Sentry.captureException(error, {
+      tags: { context: "stripe.webhook.subscription_deleted" },
+      extra: { subscriptionId },
+    });
+  }
+}
+
+/**
  * invoice.payment_failed — 결제 실패 시 구독 상태를 past_due로 변경
  *
  * Stripe webhook payload:
@@ -281,6 +327,10 @@ export async function POST(
       }
       case "customer.subscription.updated": {
         await handleSubscriptionUpdated(eventData);
+        break;
+      }
+      case "customer.subscription.deleted": {
+        await handleSubscriptionDeleted(eventData);
         break;
       }
       case "invoice.payment_failed": {

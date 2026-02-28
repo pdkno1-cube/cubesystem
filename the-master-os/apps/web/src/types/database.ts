@@ -1098,6 +1098,7 @@ export interface Database {
           price_usd: number;
           features: Json;
           is_active: boolean;
+          stripe_price_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -1108,6 +1109,7 @@ export interface Database {
           price_usd?: number;
           features?: Json;
           is_active?: boolean;
+          stripe_price_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -1118,6 +1120,7 @@ export interface Database {
           price_usd?: number;
           features?: Json;
           is_active?: boolean;
+          stripe_price_id?: string | null;
           created_at?: string;
         };
         Relationships: [];
