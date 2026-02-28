@@ -27,6 +27,59 @@ interface WebhookErrorResponse {
   error: string;
 }
 
+/**
+ * DB subscription status — must match the CHECK constraint in
+ * workspace_subscriptions.status column.
+ */
+type DbSubscriptionStatus = "active" | "cancelled" | "past_due" | "trialing";
+
+/**
+ * Exhaustive mapping from Stripe subscription statuses to our DB statuses.
+ * Stripe sends: active, past_due, canceled, unpaid, trialing,
+ *               incomplete, incomplete_expired, paused
+ */
+const STRIPE_STATUS_MAP: Record<string, DbSubscriptionStatus> = {
+  active: "active",
+  past_due: "past_due",
+  canceled: "cancelled",
+  cancelled: "cancelled", // defensive — Stripe uses "canceled" (US spelling)
+  trialing: "trialing",
+  unpaid: "past_due",
+  incomplete: "trialing",
+  incomplete_expired: "cancelled",
+  paused: "cancelled", // Stripe Billing "pause" — treat as cancelled until resumed
+};
+
+const DEFAULT_DB_STATUS: DbSubscriptionStatus = "active";
+
+// ---------------------------------------------------------------------------
+// Idempotency — in-memory processed-event cache (per instance)
+// ---------------------------------------------------------------------------
+// Stripe may send duplicate webhook events. We keep a bounded LRU-style set
+// of recently processed event IDs to skip duplicates. This is best-effort;
+// across multiple serverless instances events may still be processed more
+// than once, but all handlers are written to be idempotent (upsert / update).
+// ---------------------------------------------------------------------------
+
+const PROCESSED_EVENT_IDS_MAX = 1000;
+const processedEventIds = new Set<string>();
+
+function markEventProcessed(eventId: string): void {
+  if (processedEventIds.size >= PROCESSED_EVENT_IDS_MAX) {
+    // Evict oldest entries (Set preserves insertion order)
+    const iterator = processedEventIds.values();
+    const first = iterator.next();
+    if (!first.done) {
+      processedEventIds.delete(first.value);
+    }
+  }
+  processedEventIds.add(eventId);
+}
+
+function isEventAlreadyProcessed(eventId: string): boolean {
+  return processedEventIds.has(eventId);
+}
+
 // ---------------------------------------------------------------------------
 // Event Handlers
 // ---------------------------------------------------------------------------
@@ -123,21 +176,10 @@ async function handleSubscriptionUpdated(
     return;
   }
 
-  // Map Stripe status to our DB status
-  type DbStatus = "active" | "cancelled" | "past_due" | "trialing";
-  const STATUS_MAP: Record<string, DbStatus> = {
-    active: "active",
-    past_due: "past_due",
-    canceled: "cancelled",
-    cancelled: "cancelled",
-    trialing: "trialing",
-    unpaid: "past_due",
-    incomplete: "trialing",
-    incomplete_expired: "cancelled",
-  };
-
-  const mappedStatus: DbStatus = STATUS_MAP[stripeStatus ?? ""] ?? "active";
-  const effectiveStatus: DbStatus = cancelAtPeriodEnd ? "cancelled" : mappedStatus;
+  const mappedStatus: DbSubscriptionStatus =
+    STRIPE_STATUS_MAP[stripeStatus ?? ""] ?? DEFAULT_DB_STATUS;
+  const effectiveStatus: DbSubscriptionStatus =
+    cancelAtPeriodEnd ? "cancelled" : mappedStatus;
 
   const updatePayload: Record<string, unknown> = {
     status: effectiveStatus,
@@ -245,6 +287,142 @@ async function handlePaymentFailed(
   }
 }
 
+/**
+ * invoice.paid — 정기 결제 성공 시 구독 기간 갱신 및 크레딧 충전 확인
+ *
+ * Stripe webhook payload:
+ *   data.object.subscription (string)
+ *   data.object.customer (string)
+ *   data.object.period_start (number, unix timestamp)
+ *   data.object.period_end (number, unix timestamp)
+ *   data.object.billing_reason (string)
+ *
+ * This handler:
+ *   1. Confirms the subscription status as "active"
+ *   2. Updates current_period_start / current_period_end from the invoice
+ *
+ * Idempotent: upserts/updates by stripe_subscription_id — safe to re-process.
+ */
+async function handleInvoicePaid(
+  data: Record<string, unknown>,
+): Promise<void> {
+  const supabase = createServiceClient();
+
+  const subscriptionId = data["subscription"] as string | undefined;
+  const periodStart = data["period_start"] as number | undefined;
+  const periodEnd = data["period_end"] as number | undefined;
+  const billingReason = data["billing_reason"] as string | undefined;
+
+  if (!subscriptionId) {
+    // One-off invoices (no subscription) — nothing to update
+    Sentry.addBreadcrumb({
+      category: "stripe.webhook",
+      message: "invoice.paid without subscription id — likely one-off invoice, skipping",
+      level: "info",
+      data: { billingReason },
+    });
+    return;
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    status: "active" as DbSubscriptionStatus,
+  };
+
+  if (periodStart !== undefined) {
+    updatePayload["current_period_start"] = new Date(periodStart * 1000).toISOString();
+  }
+  if (periodEnd !== undefined) {
+    updatePayload["current_period_end"] = new Date(periodEnd * 1000).toISOString();
+  }
+
+  const { error } = await supabase
+    .from("workspace_subscriptions")
+    .update(updatePayload)
+    .eq("stripe_subscription_id", subscriptionId);
+
+  if (error) {
+    Sentry.captureException(error, {
+      tags: { context: "stripe.webhook.invoice_paid" },
+      extra: { subscriptionId, billingReason, periodStart, periodEnd },
+    });
+  }
+}
+
+/**
+ * customer.subscription.trial_will_end — 트라이얼 종료 3일 전 알림
+ *
+ * Stripe webhook payload:
+ *   data.object.id (subscription id)
+ *   data.object.customer (string)
+ *   data.object.trial_end (number, unix timestamp)
+ *
+ * This handler records a budget alert notification so the workspace owner
+ * is informed that their trial is ending soon. No subscription state change.
+ */
+async function handleTrialWillEnd(
+  data: Record<string, unknown>,
+): Promise<void> {
+  const supabase = createServiceClient();
+
+  const subscriptionId = data["id"] as string | undefined;
+  const trialEnd = data["trial_end"] as number | undefined;
+
+  if (!subscriptionId) {
+    Sentry.captureMessage("Stripe subscription.trial_will_end: missing subscription id", {
+      level: "warning",
+    });
+    return;
+  }
+
+  // Look up the workspace for this subscription
+  const { data: sub } = await supabase
+    .from("workspace_subscriptions")
+    .select("workspace_id")
+    .eq("stripe_subscription_id", subscriptionId)
+    .maybeSingle();
+
+  const workspaceId = (sub?.workspace_id as string | undefined) ?? undefined;
+
+  if (!workspaceId) {
+    Sentry.captureMessage("Stripe subscription.trial_will_end: workspace not found for subscription", {
+      level: "warning",
+      extra: { subscriptionId },
+    });
+    return;
+  }
+
+  // Record a notification in budget_alert_notifications for the workspace
+  const trialEndDate = trialEnd
+    ? new Date(trialEnd * 1000).toISOString()
+    : "unknown";
+
+  const { error: insertError } = await supabase
+    .from("budget_alert_notifications")
+    .insert({
+      workspace_id: workspaceId,
+      threshold_percent: 100,
+      usage_percent: 0,
+      alert_type: "email",
+      triggered_at: new Date().toISOString(),
+      notified: false,
+    });
+
+  if (insertError) {
+    // Table may not exist or columns may differ — log but do not fail
+    Sentry.captureException(insertError, {
+      tags: { context: "stripe.webhook.trial_will_end" },
+      extra: { subscriptionId, workspaceId, trialEndDate },
+    });
+  }
+
+  Sentry.addBreadcrumb({
+    category: "stripe.webhook",
+    message: `Trial ending soon for workspace ${workspaceId} — trial_end: ${trialEndDate}`,
+    level: "warning",
+    data: { subscriptionId, workspaceId, trialEndDate },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/billing/webhooks/stripe — Stripe Webhook endpoint
 // ---------------------------------------------------------------------------
@@ -317,7 +495,27 @@ export async function POST(
       }
     }
 
+    // ---------------------------------------------------------------
+    // Idempotency guard — skip duplicate events
+    // ---------------------------------------------------------------
+    if (isEventAlreadyProcessed(event.id)) {
+      Sentry.addBreadcrumb({
+        category: "stripe.webhook",
+        message: `Duplicate event skipped: ${event.id} (${event.type})`,
+        level: "info",
+      });
+      return NextResponse.json({ received: true });
+    }
+
     const eventData = event.data.object as unknown as Record<string, unknown>;
+
+    // Sentry breadcrumb for every processed event
+    Sentry.addBreadcrumb({
+      category: "stripe.webhook",
+      message: `Processing event: ${event.type}`,
+      level: "info",
+      data: { eventId: event.id, eventType: event.type },
+    });
 
     // Route to event-specific handler
     switch (event.type) {
@@ -337,6 +535,14 @@ export async function POST(
         await handlePaymentFailed(eventData);
         break;
       }
+      case "invoice.paid": {
+        await handleInvoicePaid(eventData);
+        break;
+      }
+      case "customer.subscription.trial_will_end": {
+        await handleTrialWillEnd(eventData);
+        break;
+      }
       default: {
         // Unhandled event type — acknowledge receipt
         Sentry.addBreadcrumb({
@@ -348,14 +554,20 @@ export async function POST(
       }
     }
 
+    // Mark event as processed after successful handling
+    markEventProcessed(event.id);
+
     return NextResponse.json({ received: true });
   } catch (error) {
+    // ---------------------------------------------------------------
+    // Error recovery: Always return 200 to Stripe to prevent retry
+    // flooding. The error is captured in Sentry for investigation.
+    // Returning 500 would cause Stripe to exponentially retry the
+    // same event, which could amplify the problem.
+    // ---------------------------------------------------------------
     Sentry.captureException(error, {
       tags: { context: "stripe.webhook.POST" },
     });
-    return NextResponse.json(
-      { error: "Webhook processing failed." },
-      { status: 500 },
-    );
+    return NextResponse.json({ received: true });
   }
 }

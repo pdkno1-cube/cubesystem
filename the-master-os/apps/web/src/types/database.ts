@@ -1780,6 +1780,36 @@ export interface Database {
         };
         Relationships: [];
       };
+      mcp_health_alerts: {
+        Row: {
+          id: string;
+          service_name: string;
+          status: 'degraded' | 'down' | 'recovered';
+          message: string | null;
+          notified_at: string;
+          acknowledged_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          service_name: string;
+          status: 'degraded' | 'down' | 'recovered';
+          message?: string | null;
+          notified_at?: string;
+          acknowledged_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          service_name?: string;
+          status?: 'degraded' | 'down' | 'recovered';
+          message?: string | null;
+          notified_at?: string;
+          acknowledged_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1838,3 +1868,5 @@ export type AgentTaskRow = Tables['agent_tasks']['Row'];
 export type AgentConversationRow = Tables['agent_conversations']['Row'];
 export type AgentRunRow = Tables['agent_runs']['Row'];
 export type ContentMetricInsert = Tables['content_metrics']['Insert'];
+export type McpHealthAlertRow = Tables['mcp_health_alerts']['Row'];
+export type McpHealthAlertInsert = Tables['mcp_health_alerts']['Insert'];

@@ -284,7 +284,7 @@ export function MarketingClient({
         const result = await resp.json() as {
           data: {
             success: boolean;
-            status: 'published' | 'not_configured' | 'error' | 'manual';
+            status: 'published' | 'not_configured' | 'error' | 'manual' | 'rate_limited';
             message: string;
           };
         };
