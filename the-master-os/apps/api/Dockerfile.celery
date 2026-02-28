@@ -33,6 +33,7 @@ WORKDIR /app
 COPY --from=builder /build/venv /app/venv
 COPY app/ /app/app/
 COPY celery_worker.py /app/celery_worker.py
+COPY start_worker.py /app/start_worker.py
 
 ENV PATH="/app/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
@@ -43,4 +44,4 @@ USER appuser
 # No EXPOSE — Celery worker does not serve HTTP
 # No HEALTHCHECK — Celery worker is not an HTTP service
 
-CMD ["python", "-m", "celery", "-A", "celery_worker:celery_app", "worker", "--loglevel=info", "-Q", "default,pipelines,notifications,monitoring,maintenance", "-B", "--concurrency=2"]
+CMD ["python", "start_worker.py"]
