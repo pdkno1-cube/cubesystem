@@ -105,46 +105,89 @@ export function Sidebar() {
         )}
       >
         {/* Logo */}
-        <div className="flex h-16 items-center px-5">
+        <div className="flex h-[76px] items-center px-4">
           <Link
             href="/dashboard"
-            className="group flex items-center gap-3 rounded-xl p-1.5 transition-colors hover:bg-white/10"
+            className="group flex items-center gap-3.5 rounded-2xl px-3 py-2.5 transition-all duration-200 hover:bg-white/10"
           >
             {/* Cube icon */}
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand-600 shadow-md shadow-brand-900/30">
+            <div
+              className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl shadow-xl ring-1 ring-white/20"
+              style={{
+                background:
+                  'linear-gradient(145deg, #818cf8 0%, #4f46e5 45%, #312e81 100%)',
+              }}
+            >
+              {/* Inner top-left glow */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent" />
+
               <svg
-                viewBox="0 0 20 20"
+                viewBox="0 0 32 32"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
+                className="relative h-8 w-8"
               >
+                <defs>
+                  <linearGradient id="logo-top" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="white" stopOpacity="1" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0.82" />
+                  </linearGradient>
+                  <linearGradient
+                    id="logo-right"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="0%" stopColor="white" stopOpacity="0.68" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0.32" />
+                  </linearGradient>
+                  <linearGradient id="logo-left" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="white" stopOpacity="0.38" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0.12" />
+                  </linearGradient>
+                </defs>
+
                 {/* Top face */}
                 <path
-                  d="M10 2L18 6.5V7.5L10 12L2 7.5V6.5L10 2Z"
-                  fill="white"
-                  fillOpacity="0.95"
+                  d="M16 4L28 11V12L16 19L4 12V11L16 4Z"
+                  fill="url(#logo-top)"
                 />
                 {/* Left face */}
                 <path
-                  d="M2 7.5L10 12V18L2 13.5V7.5Z"
-                  fill="white"
-                  fillOpacity="0.5"
+                  d="M4 12L16 19V28L4 21V12Z"
+                  fill="url(#logo-left)"
                 />
                 {/* Right face */}
                 <path
-                  d="M18 7.5V13.5L10 18V12L18 7.5Z"
-                  fill="white"
-                  fillOpacity="0.7"
+                  d="M28 12V21L16 28V19L28 12Z"
+                  fill="url(#logo-right)"
+                />
+                {/* Outer edge */}
+                <path
+                  d="M16 4L28 11V21L16 28L4 21V11L16 4Z"
+                  stroke="white"
+                  strokeWidth="0.6"
+                  strokeOpacity="0.45"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+                {/* Inner edges */}
+                <path
+                  d="M16 19V28M4 12L16 19L28 12"
+                  stroke="white"
+                  strokeWidth="0.5"
+                  strokeOpacity="0.35"
                 />
               </svg>
             </div>
 
             {/* Text */}
             <div className="flex flex-col leading-none">
-              <span className="text-[10px] font-medium uppercase tracking-[0.15em] text-white/50">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-white/40">
                 The
               </span>
-              <span className="text-sm font-bold tracking-tight text-white">
+              <span className="mt-1 text-[15px] font-bold tracking-tight text-white">
                 Master OS
               </span>
             </div>
