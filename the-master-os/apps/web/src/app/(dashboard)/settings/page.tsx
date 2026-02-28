@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import * as Sentry from "@sentry/nextjs";
-import { User, Shield, Info, Server, ExternalLink, ShieldCheck, ShieldOff, Loader2, CheckCircle2, XCircle } from "lucide-react";
-import { InfraSection } from "@/components/settings/InfraSection";
+import { User, Shield, Info, Server, ExternalLink, ShieldCheck, ShieldOff, Loader2, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -775,7 +774,24 @@ export default function SettingsPage() {
           <SystemInfoSection />
         </TabsContent>
         <TabsContent value="infra">
-          <InfraSection />
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <Server className="h-10 w-10 text-indigo-400" />
+              <h3 className="mt-3 text-lg font-semibold text-gray-900">인프라 비용 대시보드</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                인프라 비용 관리가 독립 페이지로 이동했습니다.
+                <br />
+                비용 추이 차트, 예산 알림, 업그레이드 로드맵을 확인하세요.
+              </p>
+              <a
+                href="/infra-cost"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+              >
+                인프라 대시보드 바로가기
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

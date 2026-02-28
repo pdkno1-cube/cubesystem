@@ -19,6 +19,7 @@ import {
   HeartPulse,
   MessageSquare,
   BookOpen,
+  Server,
   Menu,
   X,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { href: "/marketing", label: "마케팅 캘린더", icon: CalendarDays },
   { href: "/healing", label: "자동치유", icon: HeartPulse },
   { href: "/billing", label: "크레딧", icon: CreditCard },
+  { href: "/infra-cost", label: "인프라 비용", icon: Server },
   { href: "/vault", label: "시크릿 볼트", icon: Shield },
   { href: "/audit-logs", label: "감사 로그", icon: FileText },
   { href: "/settings", label: "설정", icon: Settings },
